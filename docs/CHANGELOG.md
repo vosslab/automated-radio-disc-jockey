@@ -47,6 +47,7 @@
 - Soften next-song prompt strictness by making XML tags preferred and adding labeled fallback output guidance (`choice:` / `reason:` / `winner:`).
 - Expand malformed-output coverage in `tests/test_llm_wrapper.py` and add `tests/test_next_song_selector.py` integration tests for noisy/labeled responses and bounded retry fallback.
 - Update `docs/active_plans/LLM_GUARDRAIL_TOLERANCE_REFACTOR_PLAN.md` with completion status, gate outcomes, and verification evidence.
+- Standardize README with a concise docs map, a verified single quick-start path, and maintainer doc link.
 - Add `docs/active_plans/LLM_GUARDRAIL_TOLERANCE_REFACTOR_PLAN.md` with a phased manager plan to move LLM handling from strict rejection toward tolerant parsing, bounded retries, and fallback-first execution.
 
 ## 2026-02-04
