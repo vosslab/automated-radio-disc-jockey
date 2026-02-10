@@ -1,6 +1,37 @@
 # Changelog
 
 ## 2026-02-10
+- Final closeout prep: refreshed guardrail evidence from a single snapshot window, recorded Gate D temporary exception context, and kept plan status in progress pending manager archive approval.
+- Execute strict-mode drift removal pass across parser naming, intro/runtime messaging, benchmark labels, and prompt guidance wording while keeping recovery-first behavior unchanged.
+- Add a strict-mode terminology/behavior removal backlog section to `docs/active_plans/LLM_GUARDRAIL_TOLERANCE_REFACTOR_PLAN.md` with file-level actions and completion checks.
+- Rename parser mode labels from `strict_tag`/`missing_close_tag`/`heuristic_fallback` to recovery-oriented names (`tag_match`/`open_tag_recovery`/`heuristic_recovery`) to align operator-facing logs with tolerant guardrail philosophy.
+- Move `tests/run_prompt_length_benchmark.py` to `benchmarks/run_prompt_length_benchmark.py` and document it as profiling-only (non-gating) in the active guardrail plan.
+- Clarify `AGENTS.md` shell usage: run commands with `bash` and prefix executions with `source source_me.sh && ...`.
+- Reframe prompt-length benchmark/report checks as non-gating profiling signals in `docs/active_plans/LLM_GUARDRAIL_TOLERANCE_REFACTOR_PLAN.md`; closure gates remain recovery success, bounded retries/fallbacks, and real workflow timing.
+- Run a small recovery-first alignment pass: keep prompt brevity wording soft (aim/prefer), refresh consolidated plan evidence with current script outputs, and treat upstream generation errors as non-parser baseline exclusions.
+- Reword `prompts/next_song_selection.txt` and `prompts/next_song_referee.txt` to use tolerant brevity guidance (aim/prefer) instead of exact sentence-count wording, while keeping XML-preferred output with labeled fallback.
+- Clarify in `docs/active_plans/LLM_GUARDRAIL_TOLERANCE_REFACTOR_PLAN.md` that output-length targets are non-blocking guidance and parser recovery remains the primary acceptance basis.
+- Add a new "Design philosophy" section near the top of `docs/active_plans/LLM_GUARDRAIL_TOLERANCE_REFACTOR_PLAN.md` to codify tolerant, recovery-first guardrail principles.
+- Clarify `docs/active_plans/LLM_GUARDRAIL_TOLERANCE_REFACTOR_PLAN.md` so output-length and sentence-count limits are soft guidance, not hard acceptance gates, keeping recovery-first parsing as the primary criterion.
+- Consolidate all `LLM_GUARDRAIL_*` evidence docs into sectioned content inside `docs/active_plans/LLM_GUARDRAIL_TOLERANCE_REFACTOR_PLAN.md` and remove the standalone report files.
+- Add Phase 5/6 evidence artifacts under `docs/active_plans/`:
+  - `LLM_GUARDRAIL_PHASE5_PROMPT_BUDGET_AB_EVIDENCE_2026-02-10.md`
+  - `LLM_GUARDRAIL_PHASE6_ROLLOUT_ROLLBACK_POLICY_2026-02-10.md`
+  - `LLM_GUARDRAIL_PHASE6_STABILITY_WINDOW_EVIDENCE_2026-02-10.md`
+  - `LLM_GUARDRAIL_PHASE6_STRICT_PATH_REMOVAL_LIST_2026-02-10.md`
+- Add reproducible evidence scripts `tests/report_prompt_ab_lengths.py` and `tests/report_stability_window.py`.
+- Extend tolerant parser heuristic in `llm_wrapper.py` to recover DJ intro text wrapped in `<intro text>...</intro text>` as response content.
+- Refresh `docs/active_plans/LLM_GUARDRAIL_BASELINE_REPORT_2026-02-10.md` with current reproducible baseline output (`50/50`, `100.0%`) using `tests/report_llm_parse_baseline.py`.
+- Add `tests/report_llm_parse_baseline.py` and `docs/active_plans/LLM_GUARDRAIL_BASELINE_REPORT_2026-02-10.md` to provide reproducible baseline taxonomy and parse-success calculations.
+- Add `tests/test_disc_jockey.py` with malformed/labeled referee output recovery tests covering intro referee and song referee selection paths.
+- Downgrade completion status in `docs/active_plans/LLM_GUARDRAIL_TOLERANCE_REFACTOR_PLAN.md` to in-progress, with explicit open Gate A/Phase 5/Phase 6 evidence requirements and follow-up actions.
+- Update `ARCHITECTURE.md` to document layered parser extraction and tolerant labeled fallback handling in selector/referee flows.
+- Add `source_me.sh` with Python 3.12 shell defaults (`PYTHONUNBUFFERED`, `PYTHONDONTWRITEBYTECODE`, `PYTHON_VERSION`, and Homebrew Python libexec PATH) plus a `py312` alias.
+- Add layered LLM parse results in `llm_wrapper.py` with `ParseResult` metadata (`parse_mode`, `confidence_tier`, warnings) and tolerant extraction modes for strict tags, missing close tags, and heuristic fallback.
+- Migrate selector, intro, and referee flows to consume structured parse results and log parse mode/confidence telemetry during runtime decisions.
+- Soften next-song prompt strictness by making XML tags preferred and adding labeled fallback output guidance (`choice:` / `reason:` / `winner:`).
+- Expand malformed-output coverage in `tests/test_llm_wrapper.py` and add `tests/test_next_song_selector.py` integration tests for noisy/labeled responses and bounded retry fallback.
+- Update `docs/active_plans/LLM_GUARDRAIL_TOLERANCE_REFACTOR_PLAN.md` with completion status, gate outcomes, and verification evidence.
 - Add `docs/active_plans/LLM_GUARDRAIL_TOLERANCE_REFACTOR_PLAN.md` with a phased manager plan to move LLM handling from strict rejection toward tolerant parsing, bounded retries, and fallback-first execution.
 
 ## 2026-02-04

@@ -275,10 +275,17 @@ def choose_next_song(current_song: Song, song_list: list[str], sample_size: int,
 
 	prompt = build_selection_prompt(current_song, candidate_songs)
 
-	raw = llm_wrapper.run_llm(prompt, model_name=model_name)
-	raw_choice = llm_wrapper.extract_xml_tag(raw, "choice")
+	raw = llm_wrapper.run_llm(prompt, model_name=model_name, max_tokens=220)
+	choice_result = llm_wrapper.extract_tag_result(raw, "choice")
+	reason_result = llm_wrapper.extract_tag_result(raw, "reason")
+	raw_choice = choice_result.value
 	choice = clean_llm_choice(raw_choice)
-	reason = llm_wrapper.extract_xml_tag(raw, "reason")
+	reason = reason_result.value
+	print(
+		f"{Colors.NAVY}Selector parse modes: "
+		f"choice={choice_result.parse_mode}/{choice_result.confidence_tier}, "
+		f"reason={reason_result.parse_mode}/{reason_result.confidence_tier}.{Colors.ENDC}"
+	)
 
 	if not is_reason_acceptable(reason, candidate_songs):
 		preview = _preview_reason(reason)
@@ -288,10 +295,17 @@ def choose_next_song(current_song: Song, song_list: list[str], sample_size: int,
 			print(f"{Colors.WARNING}LLM reason rejected: (empty){Colors.ENDC}")
 		print(f"{Colors.WARNING}LLM reason was placeholder or shorthand; retrying for a readable explanation.{Colors.ENDC}")
 		retry_prompt = build_selection_prompt(current_song, candidate_songs)
-		raw_retry = llm_wrapper.run_llm(retry_prompt, model_name=model_name)
-		raw_choice_retry = llm_wrapper.extract_xml_tag(raw_retry, "choice")
+		raw_retry = llm_wrapper.run_llm(retry_prompt, model_name=model_name, max_tokens=220)
+		choice_retry_result = llm_wrapper.extract_tag_result(raw_retry, "choice")
+		reason_retry_result = llm_wrapper.extract_tag_result(raw_retry, "reason")
+		raw_choice_retry = choice_retry_result.value
 		choice_retry = clean_llm_choice(raw_choice_retry)
-		reason_retry = llm_wrapper.extract_xml_tag(raw_retry, "reason")
+		reason_retry = reason_retry_result.value
+		print(
+			f"{Colors.NAVY}Selector retry parse modes: "
+			f"choice={choice_retry_result.parse_mode}/{choice_retry_result.confidence_tier}, "
+			f"reason={reason_retry_result.parse_mode}/{reason_retry_result.confidence_tier}.{Colors.ENDC}"
+		)
 		if not is_reason_acceptable(reason_retry, candidate_songs):
 			preview_retry = _preview_reason(reason_retry)
 			if preview_retry:

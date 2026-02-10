@@ -1,3 +1,4 @@
+benchmarks/
 .DS_Store
 report_shebang.txt
 report_pyflakes.txt

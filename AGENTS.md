@@ -2,6 +2,10 @@
 
 This repo is split into small scripts that can be run independently or orchestrated by `disc_jockey.py`.
 
+## Shell Usage
+- Use `bash` for shell command execution in this repo.
+- Prefix command runs with `source source_me.sh && ...` so repo defaults are consistently applied.
+
 ## Core Modules
 - `audio_utils.py`
   - `Song` class caches metadata (title/artist/album/compilation/length/size) with colored one-line/multiline info.

@@ -278,7 +278,12 @@ def _refine_intro_with_llm(
 	refined = llm_wrapper.run_llm(prompt, model_name=model_name)
 	if not refined:
 		return None
-	extracted = llm_wrapper.extract_xml_tag(refined, "response")
+	extracted_result = llm_wrapper.extract_tag_result(refined, "response")
+	extracted = extracted_result.value
+	print(
+		f"{Colors.NAVY}Cleanup parse mode: "
+		f"response={extracted_result.parse_mode}/{extracted_result.confidence_tier}.{Colors.ENDC}"
+	)
 	candidate = extracted or refined
 	candidate = _strip_code_fences(candidate)
 	candidate = re.sub(r"</?\s*intro\s*text\s*>", " ", candidate, flags=re.IGNORECASE)
@@ -537,14 +542,24 @@ def prepare_intro_text(
 		return None
 
 	# Use the generic XML extractor for the response tag
-	facts_block = llm_wrapper.extract_xml_tag(dj_intro, "facts")
+	facts_result = llm_wrapper.extract_tag_result(dj_intro, "facts")
+	facts_block = facts_result.value
+	print(
+		f"{Colors.NAVY}Intro parse modes: "
+		f"facts={facts_result.parse_mode}/{facts_result.confidence_tier}.{Colors.ENDC}"
+	)
 	if not facts_block:
 		print(f"{Colors.DARK_YELLOW}No <facts> block detected; continuing anyway.{Colors.ENDC}")
 	facts_ok, facts_reason = _validate_facts_block(facts_block)
 	if not facts_ok:
 		print(f"{Colors.DARK_YELLOW}Invalid <facts> block ({escape(facts_reason)}); continuing anyway.{Colors.ENDC}")
 
-	clean_intro = llm_wrapper.extract_xml_tag(dj_intro, "response")
+	response_result = llm_wrapper.extract_tag_result(dj_intro, "response")
+	clean_intro = response_result.value
+	print(
+		f"{Colors.NAVY}Intro parse modes: "
+		f"response={response_result.parse_mode}/{response_result.confidence_tier}.{Colors.ENDC}"
+	)
 
 	if clean_intro:
 		print(f"{Colors.SKY_BLUE}Cleaning intro with LLM to reduce fluff...{Colors.ENDC}")

@@ -436,7 +436,7 @@ class DiscJockey:
 
 		if not candidates and relaxed_candidates:
 			best_relaxed = max(relaxed_candidates, key=lambda item: len(item[1]))
-			print(f"{Colors.WARNING}Using relaxed intro fallback; strict validation produced no candidates.{Colors.ENDC}")
+			print(f"{Colors.WARNING}Using relaxed intro fallback; primary validation produced no candidates.{Colors.ENDC}")
 			return best_relaxed[1]
 
 		if not candidates:
@@ -487,9 +487,16 @@ class DiscJockey:
 			},
 		)
 
-		raw = llm_wrapper.run_llm(prompt, model_name=self.model_name)
-		winner_text = llm_wrapper.extract_xml_tag(raw, "winner")
-		ref_reason = llm_wrapper.extract_xml_tag(raw, "reason")
+		raw = llm_wrapper.run_llm(prompt, model_name=self.model_name, max_tokens=180)
+		winner_result = llm_wrapper.extract_tag_result(raw, "winner")
+		reason_result = llm_wrapper.extract_tag_result(raw, "reason")
+		winner_text = winner_result.value
+		ref_reason = reason_result.value
+		print(
+			f"{Colors.NAVY}Intro referee parse modes: "
+			f"winner={winner_result.parse_mode}/{winner_result.confidence_tier}, "
+			f"reason={reason_result.parse_mode}/{reason_result.confidence_tier}.{Colors.ENDC}"
+		)
 
 		if ref_reason:
 			clean_reason = self._clean_referee_reason(ref_reason)
@@ -564,10 +571,17 @@ class DiscJockey:
 		max_attempts = 2
 		for attempt in range(max_attempts):
 			prompt = self._build_referee_prompt(current_song, candidate_lines, results)
-			raw = llm_wrapper.run_llm(prompt, model_name=self.model_name)
+			raw = llm_wrapper.run_llm(prompt, model_name=self.model_name, max_tokens=180)
 			raw_output = raw.strip() if raw else ""
-			winner_text = llm_wrapper.extract_xml_tag(raw, "winner")
-			ref_reason = llm_wrapper.extract_xml_tag(raw, "reason")
+			winner_result = llm_wrapper.extract_tag_result(raw, "winner")
+			reason_result = llm_wrapper.extract_tag_result(raw, "reason")
+			winner_text = winner_result.value
+			ref_reason = reason_result.value
+			print(
+				f"{Colors.NAVY}Song referee parse modes: "
+				f"winner={winner_result.parse_mode}/{winner_result.confidence_tier}, "
+				f"reason={reason_result.parse_mode}/{reason_result.confidence_tier}.{Colors.ENDC}"
+			)
 
 			resolved = self._resolve_referee_winner(winner_text, valid)
 			if resolved and resolved.song:
