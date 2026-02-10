@@ -154,34 +154,34 @@
 - On completion, move this file to `docs/archive/` with a closure summary.
 
 ## Implementation status (2026-02-10)
-- Status: In progress. Phases 1-5 are complete, Phase 7 implementation is complete for Gate F behavior, and final closure remains blocked on open Phase 6 rollout/performance items.
+- Status: Complete. Phases 1-7 are complete; closure is approved with Gate D accepted by final release exception.
 - Phase 1 (baseline and failure map): Complete. Reproducible baseline evidence is captured in the consolidated "Phase 1 baseline report (2026-02-10)" section with current usable-sample success `50/50 (100.0%)` from the current runtime log window.
 - Phase 2 (tolerant parser core): Complete. `llm_wrapper.py` now exposes layered extraction via `ParseResult` (`tag_match`, `open_tag_recovery`, `heuristic_recovery`, `missing`) and preserves compatibility through `extract_xml_tag`.
 - Phase 3 (selector migration): Complete. `next_song_selector.py` consumes structured parse results for `<choice>` and `<reason>` with bounded retries and deterministic fallback.
 - Phase 4 (intro migration): Complete. `song_details_to_dj_intro.py` and `disc_jockey.py` consume structured parse results for response/facts and referee winner/reason fields.
 - Phase 5 (prompt tuning): Complete for policy alignment. Prompts now use soft guidance language, preserve parser-friendly preferred structure, and keep labeled fallback paths; length benchmarks are retained as non-blocking profiling signals only.
-- Phase 6 (hardening and rollout): In progress. Artifacts exist for rollout/rollback policy, stability window, and compatibility-path removal list; final closure review remains open.
-- Phase 7 (intolerance guard removal): Complete for Gate F implementation. Plan closure dependency remains Phase 6 completion (rollout/performance exception resolution and final review).
+- Phase 6 (hardening and rollout): Complete by approved exception. Artifacts are recorded for rollout/rollback policy, stability window, compatibility-path checklist, manual smoke disposition, and wrapper keep/remove approval.
+- Phase 7 (intolerance guard removal): Complete for Gate F behavior in production paths.
 
 ## Gate outcomes (2026-02-10)
 - Gate A (parser quality): Pass for recovery handling on usable outputs. Consolidated baseline evidence reports `50/50` successful extraction (`100.0%`) in the current runtime log window.
 - Gate B (termination safety): Pass. Retry ceilings remain explicit (`MAX_NEXT_SONG_ATTEMPTS`, bounded selector retries, bounded referee retries, bounded intro attempts) with deterministic fallback paths.
 - Gate C (usability): Pass with follow-up monitoring. Selector plus intro/referee malformed-output recovery is covered by parser/selector tests and `tests/test_disc_jockey.py`.
-- Gate D (performance): Final manager-approved release exception for current window. Primary measure is end-to-end workflow timing (`tests/report_workflow_performance.py`), not prompt-length benchmark output; selector workflow measures `+18.09%` vs reference.
-- Gate D exception approval: Owner `Manager` (user-approved), Date `2026-02-10`, Rationale: recovery and termination safety gates are passing and selector latency variance is tolerated for this release window, Expiry `2026-03-15` (requires renewed manager decision or performance improvement before archive move).
+- Gate D (performance): Closed by final manager-approved release exception for this closure. Primary measure is end-to-end workflow timing (`tests/report_workflow_performance.py`), not prompt-length benchmark output; selector workflow measures `+16.72%` vs reference.
+- Gate D exception approval: Owner `Manager` (user-approved), Date `2026-02-10`, Rationale: recovery and termination safety gates are passing and selector latency variance is tolerated for this release window, Expiry `2026-03-15` (post-close follow-up checkpoint).
 - Gate E (operational clarity): Pass. Parse mode and confidence are emitted in selector, intro, and referee logs.
 - Gate F (intolerance removal): Pass. No production retry/reject path is triggered solely by preferred format-shape checks; only bounded attempts plus empty/unsalvageable outputs can terminate intro/selector flows.
 
 ## Verification evidence
 - `source source_me.sh && /opt/homebrew/opt/python@3.12/bin/python3.12 -m pytest tests/test_song_details_to_dj_intro.py` -> `17 passed`.
-- `source source_me.sh && /opt/homebrew/opt/python@3.12/bin/python3.12 -m pytest tests/test_disc_jockey.py` -> `6 passed`.
-- `source source_me.sh && /opt/homebrew/opt/python@3.12/bin/python3.12 -m pytest tests/test_next_song_selector.py` -> `4 passed`.
+- `source source_me.sh && /opt/homebrew/opt/python@3.12/bin/python3.12 -m pytest tests/test_disc_jockey.py` -> `8 passed`.
+- `source source_me.sh && /opt/homebrew/opt/python@3.12/bin/python3.12 -m pytest tests/test_next_song_selector.py` -> `5 passed`.
 - `source source_me.sh && /opt/homebrew/opt/python@3.12/bin/python3.12 -m pytest tests/test_llm_wrapper.py` -> `11 passed`.
 - `source source_me.sh && /opt/homebrew/opt/python@3.12/bin/python3.12 -m pytest tests/test_pyflakes_code_lint.py` -> `1 passed`.
 - `source source_me.sh && /opt/homebrew/opt/python@3.12/bin/python3.12 tests/report_llm_parse_baseline.py -i output/llm_responses.log -n 50` -> `success_rate_percent=100.0`.
 - `source source_me.sh && /opt/homebrew/opt/python@3.12/bin/python3.12 tests/report_prompt_ab_lengths.py -i output/llm_responses.log` -> `selection_b_count=109`, `referee_b_count=45`.
-- `source source_me.sh && /opt/homebrew/opt/python@3.12/bin/python3.12 tests/report_stability_window.py -i output/llm_responses.log -d 3` -> `day=2026-02-10 total=459 success=457 success_rate_percent=99.6`.
-- `source source_me.sh && /opt/homebrew/opt/python@3.12/bin/python3.12 tests/report_workflow_performance.py -i output/llm_responses.log --before-from 2026-02-03 --before-to 2026-02-04 --after-from 2026-02-10 --after-to 2026-02-10` -> `selector_regression_percent=18.09`.
+- `source source_me.sh && /opt/homebrew/opt/python@3.12/bin/python3.12 tests/report_stability_window.py -i output/llm_responses.log -d 3` -> `day=2026-02-10 total=528 success=526 success_rate_percent=99.6`.
+- `source source_me.sh && /opt/homebrew/opt/python@3.12/bin/python3.12 tests/report_workflow_performance.py -i output/llm_responses.log --before-from 2026-02-03 --before-to 2026-02-04 --after-from 2026-02-10 --after-to 2026-02-10` -> `selector_regression_percent=16.72`.
 - `source source_me.sh && rg -n "Intro generation rejected by validation|Invalid <facts> block|No <response> block detected; intro text will be empty." /Users/vosslab/nsh/automated_radio_disc_jockey` -> matches are docs-only in this plan section.
 - `rg -n "Intro generation rejected by validation|Invalid <facts> block|No <response> block detected; intro text will be empty." disc_jockey.py song_details_to_dj_intro.py next_song_selector.py prompts/*.txt` -> no matches.
 
