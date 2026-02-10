@@ -199,11 +199,12 @@ def process_audio_with_sox(input_file: str, speed: float, output_file: str | Non
 	output_file = output_file or "temp_processed.wav"
 	# Keep dynamics first and loudness normalization last.
 	# Do not normalize before compand; that reduces compand's effectiveness.
-	# Use extra post-chain headroom to prevent mid-phrase peaks.
+	# Use extra headroom to prevent mid-phrase compand clipping while
+	# keeping a moderate startup level (avoid over-soft intro onset).
 	command = (
 		f"sox \"{input_file}\" \"{output_file}\" "
 		f"tempo {speed} "
-		"compand 0.8,1.8 6:-70,-60,-20 -8 0 0.05 "
+		"compand 0.6,1.4 6:-70,-60,-20 -12 -12 0.05 "
 		"silence 1 0.1 1% -1 0.9 1% "
 		"norm -3"
 	)
