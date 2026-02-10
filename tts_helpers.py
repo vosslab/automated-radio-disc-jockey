@@ -197,11 +197,15 @@ def text_to_speech_gtts(text: str) -> str:
 #============================================
 def process_audio_with_sox(input_file: str, speed: float, output_file: str | None = None) -> str:
 	output_file = output_file or "temp_processed.wav"
+	# Keep dynamics first and loudness normalization last.
+	# Do not normalize before compand; that reduces compand's effectiveness.
+	# Use extra post-chain headroom to prevent mid-phrase peaks.
 	command = (
 		f"sox \"{input_file}\" \"{output_file}\" "
 		f"tempo {speed} "
-		"compand 0.3,1 6:-70,-60,-20 -5 -90 0.2 "
-		"norm -3 silence 1 0.1 1% -1 0.9 1%"
+		"compand 0.8,1.8 6:-70,-60,-20 -8 0 0.05 "
+		"silence 1 0.1 1% -1 0.9 1% "
+		"norm -6"
 	)
 	print(f"[sox] {command}")
 	os.system(command)

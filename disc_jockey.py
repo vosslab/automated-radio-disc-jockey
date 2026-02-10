@@ -226,17 +226,11 @@ class DiscJockey:
 				)
 				use_cached_audio = False
 
-			if intro_text and len(intro_text.strip()) > 5:
+			if intro_text and intro_text.strip():
 				print(f"{Colors.OKGREEN}Intro text ready (len={len(intro_text.strip())}).{Colors.ENDC}")
 				break
 			else:
-				if intro_text is None:
-					print(f"{Colors.WARNING}Intro generation rejected by validation; retrying...{Colors.ENDC}")
-				else:
-					print(
-						f"{Colors.WARNING}Intro text candidate too short "
-						f"(len={len(intro_text.strip()) if intro_text else 0}); retrying...{Colors.ENDC}"
-					)
+				print(f"{Colors.WARNING}Intro generation produced no usable text after recovery; retrying...{Colors.ENDC}")
 
 			intro_text = None
 			if using_queue:
@@ -321,12 +315,12 @@ class DiscJockey:
 				print(f"{Colors.FAIL}No next song available. Ending session.{Colors.ENDC}")
 				break
 
-			if self.queued_intro and len(self.queued_intro.strip()) > 5:
+			if self.queued_intro and self.queued_intro.strip():
 				print(f"{Colors.OKGREEN}Queued intro ready for next track.{Colors.ENDC}")
 				if self.queued_intro_audio:
 					print(f"{Colors.OKGREEN}Queued intro audio ready for next track.{Colors.ENDC}")
 			else:
-				print(f"{Colors.WARNING}Next intro missing or too short; will skip TTS for next track.{Colors.ENDC}")
+				print(f"{Colors.WARNING}Next intro missing after recovery; will skip TTS for next track.{Colors.ENDC}")
 
 			# Handoff to the next track
 			self.previous_song = self.current_song
@@ -356,47 +350,26 @@ class DiscJockey:
 		print(f"{Colors.OKBLUE}Transcribing lyrics for {file_name}...{Colors.ENDC}")
 		lyrics_text = transcribe_audio.transcribe_audio(song.path)
 
-		def _estimate_sentence_count(text: str) -> int:
-			parts = re.split(r"[.!?]+", text)
-			sentences = 0
-			for part in parts:
-				words = part.strip().split()
-				if len(words) >= 3:
-					sentences += 1
-			return sentences
-
-		def _is_intro_usable(intro: str, relaxed: bool = False) -> tuple[bool, str]:
-			if not intro:
-				return (False, "empty intro")
-			text = intro.strip()
-			lowered = text.lower()
-			if "<response" in lowered or "</response" in lowered:
-				return (False, "contains XML tags")
-			if "fact:" in lowered or "trivia:" in lowered:
-				return (False, "contains FACT/TRIVIA lines")
-			sentence_count = _estimate_sentence_count(text)
+		def _prepare_intro_candidate(intro_text: str) -> tuple[str, str]:
+			if not intro_text:
+				return ("", "empty intro")
+			cleaned = song_details_to_dj_intro._sanitize_intro_text(intro_text)
+			if not cleaned:
+				return ("", "no usable prose after cleanup")
+			finalized = song_details_to_dj_intro._finalize_intro_text(cleaned, song, prev_song, False)
+			if finalized:
+				return (finalized.strip(), "")
+			relaxed = song_details_to_dj_intro._build_relaxed_intro(cleaned, song)
 			if relaxed:
-				if len(text.split()) < 12:
-					return (False, "too short (<12 words)")
-				if sentence_count < 2:
-					return (False, "not enough sentences (<2)")
-			else:
-				if len(text) < 200:
-					return (False, "too short (<200 chars)")
-				if len(text.split()) < 30:
-					return (False, "too short (<30 words)")
-				if sentence_count < 3:
-					return (False, "not enough sentences (<3)")
-
-			return (True, "")
+				return (relaxed.strip(), "using relaxed cleanup")
+			# Recovery-first fallback: keep cleaned prose when validation polish fails.
+			return (cleaned.strip(), "using cleaned prose fallback")
 
 		candidates: list[tuple[str, str]] = []
-		relaxed_candidates: list[tuple[str, str]] = []
 		for label in ("A", "B"):
 			print(f"{Colors.OKBLUE}Generating DJ intro option {label}...{Colors.ENDC}")
 			max_intro_attempts = 2
 			intro = ""
-			accepted_relaxed = False
 			for attempt in range(max_intro_attempts):
 				intro = song_details_to_dj_intro.prepare_intro_text(
 					song,
@@ -405,39 +378,26 @@ class DiscJockey:
 					details_text=details_text,
 					lyrics_text=lyrics_text,
 				)
-				if not intro:
-					print(f"{Colors.WARNING}Intro option {label} attempt {attempt + 1} rejected: empty intro{Colors.ENDC}")
-					intro = ""
-					continue
-				intro = intro.strip()
-				ok, reason = _is_intro_usable(intro, relaxed=False)
-				if ok:
-					accepted_relaxed = False
+				candidate_intro, note = _prepare_intro_candidate(intro)
+				if candidate_intro:
+					intro = candidate_intro
+					if note:
+						print(
+							f"{Colors.WARNING}Intro option {label} attempt {attempt + 1} "
+							f"accepted via recovery path: {escape(note)}{Colors.ENDC}"
+						)
 					break
-				ok_relaxed, _ = _is_intro_usable(intro, relaxed=True)
-				if ok_relaxed:
-					accepted_relaxed = True
-					print(
-						f"{Colors.WARNING}Intro option {label} attempt {attempt + 1} "
-						f"accepted with relaxed validation: {escape(reason)}{Colors.ENDC}"
-					)
-					break
-				print(f"{Colors.WARNING}Intro option {label} attempt {attempt + 1} rejected: {escape(reason)}{Colors.ENDC}")
+				print(
+					f"{Colors.WARNING}Intro option {label} attempt {attempt + 1} "
+					f"needs retry: {escape(note)}{Colors.ENDC}"
+				)
 				intro = ""
 
 			if intro:
 				print(f"{Colors.OKMAGENTA}Intro Option {label}:{Colors.ENDC}\n{escape(intro)}\n{'-'*60}")
-				if accepted_relaxed:
-					relaxed_candidates.append((label, intro))
-				else:
-					candidates.append((label, intro))
+				candidates.append((label, intro))
 			else:
-				print(f"{Colors.WARNING}Intro option {label} failed validation; skipping it.{Colors.ENDC}")
-
-		if not candidates and relaxed_candidates:
-			best_relaxed = max(relaxed_candidates, key=lambda item: len(item[1]))
-			print(f"{Colors.WARNING}Using relaxed intro fallback; primary validation produced no candidates.{Colors.ENDC}")
-			return best_relaxed[1]
+				print(f"{Colors.WARNING}Intro option {label} produced no usable prose; skipping it.{Colors.ENDC}")
 
 		if not candidates:
 			print(f"{Colors.FAIL}All DJ intro attempts failed; no intro will be queued.{Colors.ENDC}")

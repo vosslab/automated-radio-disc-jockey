@@ -1,7 +1,16 @@
 # Changelog
 
 ## 2026-02-10
-- Final closeout prep: refreshed guardrail evidence from a single snapshot window, recorded Gate D temporary exception context, and kept plan status in progress pending manager archive approval.
+- Lower post-SoX TTS peak target from `norm -3` to `norm -6` and reduce compand output gain (`-8`) to curb mid-phrase peaking while keeping normalization after compand.
+- Remove the last shape-only intro retry gate in `prepare_and_speak_intro` (short but non-empty intros no longer trigger retry), and refresh plan evidence/status wording from current `output/llm_responses.log` reruns.
+- Tune SoX TTS processing to reduce startup pumping by using gentler compand timing with neutral startup volume, and keep `norm -3` as the final stage after compand/silence processing.
+- Complete Phase 7 Gate F recovery-first pass: remove intro/referee strictness drift, stop selector retry-on-weak-reason when choice is recoverable, and verify with the full required pytest suite plus rejection-log grep checks.
+- Remove intro hard shape rejection gates in `disc_jockey.py`, soften `prompts/dj_intro_referee.txt`, relax selector reason acceptability for concise prose, and refresh active-plan evidence from a single rerun window in `output/llm_responses.log`.
+- Add an explicit "Intolerance guard removal policy" section and new Phase 7 (with Gate F) to `docs/active_plans/LLM_GUARDRAIL_TOLERANCE_REFACTOR_PLAN.md` so closure requires removing all non-safety rejection guards.
+- Add intro recovery-first hardening: treat `<facts>` shape checks as telemetry-only, salvage prose when `<response>` is missing, and add tests covering missing-response/noisy-output intro recovery.
+- Stabilize final Phase 6 evidence by regenerating consolidated metrics from a single logged input window, with Gate D exception/checklist language made internally consistent.
+- Final Phase 6 closeout pass: refresh plan evidence from a single run window, record manager-approved Gate D exception (with expiry), and complete compatibility-path checklist entries with smoke/approval evidence notes.
+- Final closeout prep: refreshed guardrail evidence from a single rerun window, recorded Gate D temporary exception context, and kept plan status in progress pending manager archive approval.
 - Execute strict-mode drift removal pass across parser naming, intro/runtime messaging, benchmark labels, and prompt guidance wording while keeping recovery-first behavior unchanged.
 - Add a strict-mode terminology/behavior removal backlog section to `docs/active_plans/LLM_GUARDRAIL_TOLERANCE_REFACTOR_PLAN.md` with file-level actions and completion checks.
 - Rename parser mode labels from `strict_tag`/`missing_close_tag`/`heuristic_fallback` to recovery-oriented names (`tag_match`/`open_tag_recovery`/`heuristic_recovery`) to align operator-facing logs with tolerant guardrail philosophy.

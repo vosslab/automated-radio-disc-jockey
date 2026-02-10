@@ -73,7 +73,7 @@ def _reason_has_score_shorthand(reason: str) -> bool:
 #============================================
 def is_reason_acceptable(reason: str, candidates: list[Song]) -> bool:
 	"""
-	Validate the LLM reason is human-readable.
+	Validate the LLM reason is usable for listener-facing output.
 	"""
 	if not reason:
 		return False
@@ -86,11 +86,8 @@ def is_reason_acceptable(reason: str, candidates: list[Song]) -> bool:
 	if "WHY YOU PICKED" in upper or "FILENAME.MP3" in upper:
 		return False
 
-	if _reason_has_score_shorthand(stripped):
-		return False
-
-	letters = re.sub(r"[^A-Za-z]", "", stripped)
-	if len(letters) < 20:
+	# Treat score shorthand as unusable only when it dominates the text.
+	if _reason_has_score_shorthand(stripped) and len(re.sub(r"[^A-Za-z]", "", stripped)) < 24:
 		return False
 
 	return True
@@ -287,13 +284,15 @@ def choose_next_song(current_song: Song, song_list: list[str], sample_size: int,
 		f"reason={reason_result.parse_mode}/{reason_result.confidence_tier}.{Colors.ENDC}"
 	)
 
-	if not is_reason_acceptable(reason, candidate_songs):
+	chosen_song = match_candidate_choice(choice, candidate_songs)
+	reason_ok = is_reason_acceptable(reason, candidate_songs)
+	if not reason_ok and chosen_song is None:
 		preview = _preview_reason(reason)
 		if preview:
-			print(f"{Colors.WARNING}LLM reason rejected: {escape(preview)}{Colors.ENDC}")
+			print(f"{Colors.WARNING}LLM reason needs recovery: {escape(preview)}{Colors.ENDC}")
 		else:
-			print(f"{Colors.WARNING}LLM reason rejected: (empty){Colors.ENDC}")
-		print(f"{Colors.WARNING}LLM reason was placeholder or shorthand; retrying for a readable explanation.{Colors.ENDC}")
+			print(f"{Colors.WARNING}LLM reason needs recovery: (empty){Colors.ENDC}")
+		print(f"{Colors.WARNING}Choice and reason were unusable; retrying once for recoverable output.{Colors.ENDC}")
 		retry_prompt = build_selection_prompt(current_song, candidate_songs)
 		raw_retry = llm_wrapper.run_llm(retry_prompt, model_name=model_name, max_tokens=220)
 		choice_retry_result = llm_wrapper.extract_tag_result(raw_retry, "choice")
@@ -309,14 +308,15 @@ def choose_next_song(current_song: Song, song_list: list[str], sample_size: int,
 		if not is_reason_acceptable(reason_retry, candidate_songs):
 			preview_retry = _preview_reason(reason_retry)
 			if preview_retry:
-				print(f"{Colors.WARNING}Retry reason rejected: {escape(preview_retry)}{Colors.ENDC}")
+				print(f"{Colors.WARNING}Retry reason still needs recovery: {escape(preview_retry)}{Colors.ENDC}")
 			else:
-				print(f"{Colors.WARNING}Retry reason rejected: (empty){Colors.ENDC}")
-		if is_reason_acceptable(reason_retry, candidate_songs):
-			if choice_retry:
-				choice = choice_retry
-				raw_choice = raw_choice_retry
-			reason = reason_retry
+				print(f"{Colors.WARNING}Retry reason still needs recovery: (empty){Colors.ENDC}")
+		if choice_retry:
+			choice = choice_retry
+			raw_choice = raw_choice_retry
+		reason = reason_retry
+		chosen_song = match_candidate_choice(choice, candidate_songs)
+		reason_ok = is_reason_acceptable(reason, candidate_songs)
 
 	if choice:
 		print(f"{Colors.OKGREEN}LLM selection result: {escape(choice)}{Colors.ENDC}")
@@ -327,8 +327,7 @@ def choose_next_song(current_song: Song, song_list: list[str], sample_size: int,
 	elif raw_choice:
 		print(f"{Colors.WARNING}LLM reason was unusable; continuing without it.{Colors.ENDC}")
 
-	chosen_song = match_candidate_choice(choice, candidate_songs)
-	if not is_reason_acceptable(reason, candidate_songs):
+	if not reason_ok:
 		reason = build_fallback_reason(choice, chosen_song, candidate_songs)
 	if chosen_song:
 		base_name = escape(os.path.basename(chosen_song.path).strip())

@@ -87,3 +87,103 @@ def test_run_song_referee_accepts_labeled_filename_winner(monkeypatch) -> None:
 	chosen = dj._run_referee(current_song, candidates, results)
 	assert chosen is not None
 	assert chosen.song is song_b
+
+
+#============================================
+def test_generate_intro_with_referee_accepts_short_usable_intro(monkeypatch) -> None:
+	dj = _make_disc_jockey()
+	song = _FakeSong("/music/next.mp3", "Artist", "Album", "Title")
+	prev_song = _FakeSong("/music/prev.mp3", "Prev Artist", "Prev Album", "Prev Title")
+
+	monkeypatch.setattr(disc_jockey.song_details_to_dj_intro, "fetch_song_details", lambda *_args, **_kwargs: "details")
+	monkeypatch.setattr(disc_jockey.transcribe_audio, "transcribe_audio", lambda *_args, **_kwargs: "lyrics")
+
+	intros = iter(
+		[
+			"Short but usable intro. It bridges cleanly to Title.",
+			"Backup intro option. It also mentions Title naturally.",
+		]
+	)
+	monkeypatch.setattr(
+		disc_jockey.song_details_to_dj_intro,
+		"prepare_intro_text",
+		lambda *_args, **_kwargs: next(intros),
+	)
+	monkeypatch.setattr(
+		disc_jockey.song_details_to_dj_intro,
+		"_sanitize_intro_text",
+		lambda text: text,
+	)
+	monkeypatch.setattr(
+		disc_jockey.song_details_to_dj_intro,
+		"_finalize_intro_text",
+		lambda text, *_args, **_kwargs: text,
+	)
+	monkeypatch.setattr(
+		disc_jockey.song_details_to_dj_intro,
+		"_build_relaxed_intro",
+		lambda *_args, **_kwargs: None,
+	)
+	monkeypatch.setattr(disc_jockey.DiscJockey, "_run_intro_referee", lambda *_args, **_kwargs: None)
+
+	result = dj._generate_intro_with_referee(song, prev_song)
+	assert result is not None
+	assert "usable intro" in result
+
+
+#============================================
+def test_generate_intro_with_referee_keeps_cleaned_intro_without_shape_retry(monkeypatch) -> None:
+	dj = _make_disc_jockey()
+	song = _FakeSong("/music/next.mp3", "Artist", "Album", "Title")
+	prev_song = _FakeSong("/music/prev.mp3", "Prev Artist", "Prev Album", "Prev Title")
+
+	monkeypatch.setattr(disc_jockey.song_details_to_dj_intro, "fetch_song_details", lambda *_args, **_kwargs: "details")
+	monkeypatch.setattr(disc_jockey.transcribe_audio, "transcribe_audio", lambda *_args, **_kwargs: "lyrics")
+
+	calls = {"count": 0}
+	intros = iter(
+		[
+			"Tiny but usable handoff to Title.",
+			"Second tiny option for Title.",
+		]
+	)
+
+	def fake_prepare(*_args, **_kwargs):
+		calls["count"] += 1
+		return next(intros)
+
+	monkeypatch.setattr(disc_jockey.song_details_to_dj_intro, "prepare_intro_text", fake_prepare)
+	monkeypatch.setattr(disc_jockey.song_details_to_dj_intro, "_sanitize_intro_text", lambda text: text)
+	monkeypatch.setattr(disc_jockey.song_details_to_dj_intro, "_finalize_intro_text", lambda *_args, **_kwargs: None)
+	monkeypatch.setattr(disc_jockey.song_details_to_dj_intro, "_build_relaxed_intro", lambda *_args, **_kwargs: None)
+	monkeypatch.setattr(disc_jockey.DiscJockey, "_run_intro_referee", lambda *_args, **_kwargs: None)
+
+	result = dj._generate_intro_with_referee(song, prev_song)
+	assert result is not None
+	assert "Tiny but usable handoff" in result
+	assert calls["count"] == 2
+
+
+#============================================
+def test_prepare_and_speak_intro_accepts_brief_usable_intro_without_retry(monkeypatch) -> None:
+	dj = _make_disc_jockey()
+	dj.args = SimpleNamespace(tts_speed=1.0, tts_engine="say")
+	dj.previous_song = None
+	dj.queued_intro = None
+	dj.queued_intro_audio = None
+	dj.log_intro = lambda *_args, **_kwargs: None
+	song = _FakeSong("/music/now.mp3", "Artist", "Album", "Title")
+
+	calls = {"count": 0}
+
+	def fake_generate_intro(*_args, **_kwargs):
+		calls["count"] += 1
+		return "Hi."
+
+	monkeypatch.setattr(disc_jockey.DiscJockey, "_generate_intro", fake_generate_intro)
+	monkeypatch.setattr(disc_jockey.tts_helpers, "format_intro_for_tts", lambda text: text)
+	monkeypatch.setattr(disc_jockey.tts_helpers, "speak_dj_intro", lambda *_args, **_kwargs: None)
+	monkeypatch.setattr(disc_jockey, "RICH_CONSOLE", SimpleNamespace(print=lambda *_args, **_kwargs: None))
+
+	dj.prepare_and_speak_intro(song, use_queue=False)
+	assert calls["count"] == 1

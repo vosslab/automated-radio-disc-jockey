@@ -400,7 +400,7 @@ def _normalize_fact_line(text: str) -> str:
 #============================================
 def _validate_facts_block(text: str) -> tuple[bool, str]:
 	"""
-	Ensure <facts> contains exactly five unique FACT/TRIVIA lines.
+	Check whether <facts> matches the preferred five-line FACT/TRIVIA shape.
 	"""
 	lines = [line.strip() for line in text.splitlines() if line.strip()]
 	if len(lines) != EXPECTED_FACT_LINES:
@@ -492,6 +492,21 @@ def _build_relaxed_intro(raw_text: str, song: audio_utils.Song) -> str | None:
 	return cleaned
 
 #============================================
+def _salvage_intro_from_raw_output(raw_text: str, song: audio_utils.Song) -> str | None:
+	"""
+	Salvage usable intro prose from noisy model output when <response> is missing.
+	"""
+	cleaned = _sanitize_intro_text(raw_text)
+	if not cleaned:
+		return None
+	cleaned = _append_title_if_missing(cleaned, song.title or "")
+	cleaned = _trim_intro(cleaned, MAX_INTRO_CHARS)
+	cleaned = re.sub(r"\s+", " ", cleaned).strip()
+	if not cleaned:
+		return None
+	return cleaned
+
+#============================================
 def prepare_intro_text(
 	song: audio_utils.Song,
 	prev_song: audio_utils.Song | None = None,
@@ -552,7 +567,7 @@ def prepare_intro_text(
 		print(f"{Colors.DARK_YELLOW}No <facts> block detected; continuing anyway.{Colors.ENDC}")
 	facts_ok, facts_reason = _validate_facts_block(facts_block)
 	if not facts_ok:
-		print(f"{Colors.DARK_YELLOW}Invalid <facts> block ({escape(facts_reason)}); continuing anyway.{Colors.ENDC}")
+		print(f"{Colors.DARK_YELLOW}<facts> telemetry note ({escape(facts_reason)}); continuing anyway.{Colors.ENDC}")
 
 	response_result = llm_wrapper.extract_tag_result(dj_intro, "response")
 	clean_intro = response_result.value
@@ -585,12 +600,20 @@ def prepare_intro_text(
 		if final_intro:
 			print(f"Extracted intro length: {len(final_intro)} characters.")
 			return final_intro
-		relaxed_intro = _use_relaxed_intro("Intro failed validation.")
+		relaxed_intro = _use_relaxed_intro("Intro needed additional cleanup.")
 		if relaxed_intro:
 			return relaxed_intro
+		salvaged_intro = _salvage_intro_from_raw_output(dj_intro, song)
+		if salvaged_intro:
+			print(f"{Colors.WARNING}Recovery salvage used after cleanup heuristics.{Colors.ENDC}")
+			return salvaged_intro
 		return None
 	else:
-		print("No <response> block detected; intro text will be empty.")
+		print(f"{Colors.WARNING}No <response> block detected; attempting recovery from full output.{Colors.ENDC}")
+		salvaged_intro = _salvage_intro_from_raw_output(dj_intro, song)
+		if salvaged_intro:
+			print(f"{Colors.WARNING}Recovered intro prose from untagged output.{Colors.ENDC}")
+			return salvaged_intro
 		relaxed_intro = _use_relaxed_intro("No <response> block detected.")
 		if relaxed_intro:
 			return relaxed_intro

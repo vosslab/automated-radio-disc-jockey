@@ -14,7 +14,7 @@ def test_extract_xml_tag_handles_missing_close() -> None:
 
 
 #============================================
-def test_extract_tag_result_strict_mode() -> None:
+def test_extract_tag_result_tag_match_mode() -> None:
 	raw = "<reason>clean reason</reason>"
 	result = llm_wrapper.extract_tag_result(raw, "reason")
 	assert result.value == "clean reason"

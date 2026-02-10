@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+source $HOME/.bashrc
+
 # Python 3.12 runtime defaults for this repo
 unset PYTHONHOME
 unset PYTHONPATH

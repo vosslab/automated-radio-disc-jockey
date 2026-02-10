@@ -126,3 +126,74 @@ def test_build_relaxed_intro_appends_title() -> None:
 	result = song_details_to_dj_intro._build_relaxed_intro(raw, song)
 	assert result is not None
 	assert "Magic" in result
+
+
+#============================================
+def test_prepare_intro_text_recovers_without_response_from_usable_prose(monkeypatch) -> None:
+	song = SimpleNamespace(path="/music/test.mp3", title="Magic", artist="Artist", album="Album")
+	monkeypatch.setattr(song_details_to_dj_intro, "build_prompt", lambda **kwargs: "prompt")
+	monkeypatch.setattr(
+		song_details_to_dj_intro.llm_wrapper,
+		"run_llm",
+		lambda prompt, model_name=None, **kwargs: (
+			"<facts>\n"
+			"FACT: A.\nFACT: B.\nFACT: C.\nFACT: D.\nFACT: E.\nFACT: F.\n"
+			"</facts>\n"
+			"The band cut this track in one midnight take and built it around a rough demo. "
+			"That restless pulse sets up Magic as a dramatic handoff song."
+		),
+	)
+	result = song_details_to_dj_intro.prepare_intro_text(
+		song,
+		model_name="fake",
+		details_text="details",
+		lyrics_text="",
+	)
+	assert result is not None
+	assert "Magic" in result
+
+
+#============================================
+def test_prepare_intro_text_salvages_noisy_unclosed_output(monkeypatch) -> None:
+	song = SimpleNamespace(path="/music/test.mp3", title="Magic", artist="Artist", album="Album")
+	monkeypatch.setattr(song_details_to_dj_intro, "build_prompt", lambda **kwargs: "prompt")
+	monkeypatch.setattr(
+		song_details_to_dj_intro.llm_wrapper,
+		"run_llm",
+		lambda prompt, model_name=None, **kwargs: (
+			"<facts>\n"
+			"FACT: rough note\n"
+			"TRIVIA: sketch note\n"
+			"Here is the spoken intro prose with enough detail to be usable for broadcast. "
+			"It stays readable even though tags are incomplete and noisy."
+		),
+	)
+	result = song_details_to_dj_intro.prepare_intro_text(
+		song,
+		model_name="fake",
+		details_text="details",
+		lyrics_text="",
+	)
+	assert result is not None
+	assert "spoken intro prose" in result.lower()
+
+
+#============================================
+def test_prepare_intro_text_keeps_usable_response_when_finalize_fails(monkeypatch) -> None:
+	song = SimpleNamespace(path="/music/test.mp3", title="Magic", artist="Artist", album="Album")
+	monkeypatch.setattr(song_details_to_dj_intro, "build_prompt", lambda **kwargs: "prompt")
+	monkeypatch.setattr(
+		song_details_to_dj_intro.llm_wrapper,
+		"run_llm",
+		lambda prompt, model_name=None, **kwargs: "<response>Short but usable handoff line.</response>",
+	)
+	monkeypatch.setattr(song_details_to_dj_intro, "_finalize_intro_text", lambda *_args, **_kwargs: None)
+	monkeypatch.setattr(song_details_to_dj_intro, "_build_relaxed_intro", lambda *_args, **_kwargs: None)
+	result = song_details_to_dj_intro.prepare_intro_text(
+		song,
+		model_name="fake",
+		details_text="details",
+		lyrics_text="",
+	)
+	assert result is not None
+	assert "Short but usable handoff line." in result
