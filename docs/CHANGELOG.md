@@ -7,6 +7,7 @@
 - Tune SoX compand output gain (`-8`) to curb mid-phrase peaking while keeping normalization as the final stage (`norm -3` in current settings).
 - Retune SoX compand for lower clipping risk and less-muted startup (`compand 0.6,1.4 ... -12 -12 0.05`) while keeping `norm -3` as the final stage.
 - Follow-up SoX tuning: reduce compand gain to `-14` (keep initial volume `-12`) to further suppress compand-stage clipping while preserving startup feel and final `norm -3`.
+- Strip parenthetical/bracketed title annotations (for example `(From "...")` and `[...]`) from spoken intro text before TTS formatting.
 - Remove the last shape-only intro retry gate in `prepare_and_speak_intro` (short but non-empty intros no longer trigger retry), and refresh plan evidence/status wording from current `output/llm_responses.log` reruns.
 - Tune SoX TTS processing to reduce startup pumping by using gentler compand timing with neutral startup volume, and keep `norm -3` as the final stage after compand/silence processing.
 - Complete Phase 7 Gate F recovery-first pass: remove intro/referee strictness drift, stop selector retry-on-weak-reason when choice is recoverable, and verify with the full required pytest suite plus rejection-log grep checks.

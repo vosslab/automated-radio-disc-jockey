@@ -56,3 +56,25 @@ def test_format_intro_for_tts_filters_fact_lines() -> None:
 	assert "FACT:" not in normalized
 	assert "Ladies and gentlemen" not in normalized
 	assert "Hello there." in normalized
+
+
+#============================================
+def test_strip_parenthetical_and_bracketed_text_examples() -> None:
+	assert (
+		tts_helpers._strip_parenthetical_and_bracketed_text(
+			'Mickey Mouse March (From "The Mickey Mouse Club TV Show").'
+		)
+		== "Mickey Mouse March."
+	)
+	assert (
+		tts_helpers._strip_parenthetical_and_bracketed_text(
+			'So This Is Love (From "Cinderella").'
+		)
+		== "So This Is Love."
+	)
+	assert (
+		tts_helpers._strip_parenthetical_and_bracketed_text(
+			"Eating The Peach [James And The Giant Peach]."
+		)
+		== "Eating The Peach."
+	)

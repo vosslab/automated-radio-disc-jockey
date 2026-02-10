@@ -45,6 +45,7 @@ def format_intro_for_tts(text: str) -> str:
 
 	trimmed = _strip_fact_trivia_lines(text)
 	trimmed = _strip_boilerplate_intro(trimmed)
+	trimmed = _strip_parenthetical_and_bracketed_text(trimmed)
 	if not trimmed:
 		return ""
 
@@ -105,6 +106,21 @@ def _strip_boilerplate_intro(text: str) -> str:
 		return ""
 	pattern = r"^\s*ladies and gentlemen,?\s*welcome to[^.!?]*[.!?]\s*"
 	return re.sub(pattern, "", text, flags=re.IGNORECASE).lstrip()
+
+
+#============================================
+def _strip_parenthetical_and_bracketed_text(text: str) -> str:
+	"""
+	Remove parenthetical and bracketed fragments from spoken intro text.
+	Examples: "(From ...)" and "[...]" annotations in song titles.
+	"""
+	if not text:
+		return ""
+
+	cleaned = re.sub(r"\s*[\(\[][^\)\]]*[\)\]]\s*", " ", text)
+	cleaned = re.sub(r"\s+([.,!?;:])", r"\1", cleaned)
+	cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+	return cleaned.strip()
 
 #============================================
 def _print_say_command(command: list[str], text: str, show_text: bool = False) -> None:
