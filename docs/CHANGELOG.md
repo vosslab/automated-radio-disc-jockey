@@ -1,7 +1,8 @@
 # Changelog
 
 ## 2026-02-10
-- Lower post-SoX TTS peak target from `norm -3` to `norm -6` and reduce compand output gain (`-8`) to curb mid-phrase peaking while keeping normalization after compand.
+- Launch whisper.cpp transcription with reduced CPU priority via `nice` (default `WHISPER_NICE=19`, configurable/disable-able) to reduce playback contention during lyric transcription.
+- Tune SoX compand output gain (`-8`) to curb mid-phrase peaking while keeping normalization as the final stage (`norm -3` in current settings).
 - Remove the last shape-only intro retry gate in `prepare_and_speak_intro` (short but non-empty intros no longer trigger retry), and refresh plan evidence/status wording from current `output/llm_responses.log` reruns.
 - Tune SoX TTS processing to reduce startup pumping by using gentler compand timing with neutral startup volume, and keep `norm -3` as the final stage after compand/silence processing.
 - Complete Phase 7 Gate F recovery-first pass: remove intro/referee strictness drift, stop selector retry-on-weak-reason when choice is recoverable, and verify with the full required pytest suite plus rejection-log grep checks.

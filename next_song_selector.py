@@ -226,15 +226,33 @@ def match_candidate_choice(choice_text: str, candidates: list[Song]) -> Song | N
 	return None
 
 #============================================
-def build_candidate_songs(current_song: Song, song_list: list[str], sample_size: int) -> list[Song]:
+def build_candidate_songs(
+	current_song: Song,
+	song_list: list[str],
+	sample_size: int,
+	excluded_paths: set[str] | None = None,
+) -> list[Song]:
 	"""
 	Build a filtered and metadata-enriched candidate pool for the selector.
 	"""
-	if len(song_list) <= 1:
+	excluded = {os.path.abspath(path) for path in (excluded_paths or set())}
+	current_abs = os.path.abspath(current_song.path)
+	available_paths = []
+	for path in song_list:
+		abs_path = os.path.abspath(path)
+		if abs_path == current_abs:
+			continue
+		if abs_path in excluded:
+			continue
+		available_paths.append(path)
+
+	if not available_paths:
 		return []
-	candidate_paths = audio_utils.select_song_list(song_list, sample_size)
-	while current_song.path in candidate_paths and len(song_list) > 1:
-		candidate_paths = audio_utils.select_song_list(song_list, sample_size)
+
+	candidate_paths = audio_utils.select_song_list(
+		available_paths,
+		min(sample_size, len(available_paths)),
+	)
 
 	candidates = []
 	for path in candidate_paths:

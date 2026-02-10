@@ -205,7 +205,7 @@ def process_audio_with_sox(input_file: str, speed: float, output_file: str | Non
 		f"tempo {speed} "
 		"compand 0.8,1.8 6:-70,-60,-20 -8 0 0.05 "
 		"silence 1 0.1 1% -1 0.9 1% "
-		"norm -6"
+		"norm -3"
 	)
 	print(f"[sox] {command}")
 	os.system(command)

@@ -168,7 +168,7 @@
 - Gate B (termination safety): Pass. Retry ceilings remain explicit (`MAX_NEXT_SONG_ATTEMPTS`, bounded selector retries, bounded referee retries, bounded intro attempts) with deterministic fallback paths.
 - Gate C (usability): Pass with follow-up monitoring. Selector plus intro/referee malformed-output recovery is covered by parser/selector tests and `tests/test_disc_jockey.py`.
 - Gate D (performance): Final manager-approved release exception for current window. Primary measure is end-to-end workflow timing (`tests/report_workflow_performance.py`), not prompt-length benchmark output; selector workflow measures `+18.09%` vs reference.
-- Gate D exception approval: Owner `Manager` (user-approved), Date `2026-02-10`, Rationale: recovery and termination safety gates are passing and selector latency variance is tolerated for this release window, Expiry `2026-03-15` (requires re-evaluation before archive move).
+- Gate D exception approval: Owner `Manager` (user-approved), Date `2026-02-10`, Rationale: recovery and termination safety gates are passing and selector latency variance is tolerated for this release window, Expiry `2026-03-15` (requires renewed manager decision or performance improvement before archive move).
 - Gate E (operational clarity): Pass. Parse mode and confidence are emitted in selector, intro, and referee logs.
 - Gate F (intolerance removal): Pass. No production retry/reject path is triggered solely by preferred format-shape checks; only bounded attempts plus empty/unsalvageable outputs can terminate intro/selector flows.
 
@@ -184,6 +184,11 @@
 - `source source_me.sh && /opt/homebrew/opt/python@3.12/bin/python3.12 tests/report_workflow_performance.py -i output/llm_responses.log --before-from 2026-02-03 --before-to 2026-02-04 --after-from 2026-02-10 --after-to 2026-02-10` -> `selector_regression_percent=18.09`.
 - `source source_me.sh && rg -n "Intro generation rejected by validation|Invalid <facts> block|No <response> block detected; intro text will be empty." /Users/vosslab/nsh/automated_radio_disc_jockey` -> matches are docs-only in this plan section.
 - `rg -n "Intro generation rejected by validation|Invalid <facts> block|No <response> block detected; intro text will be empty." disc_jockey.py song_details_to_dj_intro.py next_song_selector.py prompts/*.txt` -> no matches.
+
+## Evidence model policy
+- Evidence model: rolling, non-static metrics from `output/llm_responses.log`.
+- Reproducibility rule: each review pass should rerun all report commands in one window and record those outputs together.
+- Drift note: totals and mode counts can change between review passes; this is expected for rolling evidence and is not itself a regression signal.
 
 ## Consolidated evidence and policy sections
 ### Phase 1 baseline report (2026-02-10)
@@ -449,6 +454,13 @@ intro_family_regression_percent=-6.34
 - Rationale: Preserve low-risk migration behavior while performance gate exception remains active.
 - Next review date: `2026-03-15`.
 
+#### Scope disposition (2026-02-10)
+- Command: `git diff -- tts_helpers.py source_me.sh`
+- Output: only `tts_helpers.py` differs in this worktree (`norm -6` -> `norm -3`); `source_me.sh` has no diff.
+- Command: `git status --short`
+- Output: non-guardrail files in this batch are `tts_helpers.py`, `transcribe_audio.py`, and `tests/test_transcribe_audio.py`.
+- Decision: treat these as separate operational audio/runtime tuning scope; they are not closure blockers for this guardrail plan.
+
 #### Proposed deletion sequence
 1. Remove remaining legacy compatibility prompt language where fallback exists.
 2. Replace call sites of `extract_xml_tag` with `extract_tag_result` where practical.
@@ -467,6 +479,7 @@ intro_family_regression_percent=-6.34
 - Keep prompt wording in soft-guidance form (aim/prefer) and avoid reintroducing exact-count compliance language.
 - Keep stability-window evidence updated through final review window.
 - Reduce selector workflow timing regression to <=10% by exception expiry (`2026-03-15`) or renew manager approval with updated owner/date/rationale before archive move.
+- Record the final Gate D decision at expiry (close exception or renew) before requesting archive move.
 - Execute compatibility-path removals only after deletion criteria are met and approved.
 - No intro retry should be triggered solely by `<facts>` shape issues; retries should happen only after response/salvage recovery paths are exhausted.
 - Keep closure-gate decisions anchored on recovery success and bounded exits, with performance and compatibility checklist outcomes as final blockers.

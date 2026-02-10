@@ -14,6 +14,7 @@ from cli_colors import Colors
 DEFAULT_WHISPER_PATH = os.path.expanduser("~/nsh/whisper.cpp")
 DEFAULT_MODEL_NAME = "ggml-medium.en.bin"
 MODEL_URL_BASE = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
+DEFAULT_WHISPER_NICE = 19
 
 # Local repo modules
 import audio_wav
@@ -21,6 +22,23 @@ import audio_wav
 #============================================
 def _resolve_whisper_cli() -> str | None:
 	return shutil.which("whisper-cli")
+
+#============================================
+def _resolve_whisper_nice_value() -> int | None:
+	"""
+	Resolve whisper process priority niceness.
+	Returns None when disabled, otherwise an int in [-20, 19].
+	"""
+	raw_value = os.environ.get("WHISPER_NICE", "").strip().lower()
+	if raw_value in ("off", "none", "disable", "disabled", "no", "false"):
+		return None
+	if not raw_value:
+		return DEFAULT_WHISPER_NICE
+	try:
+		value = int(raw_value)
+	except ValueError:
+		return DEFAULT_WHISPER_NICE
+	return max(-20, min(19, value))
 
 #============================================
 def _ensure_model(model_path: str, model_url: str, allow_download: bool) -> bool:
@@ -117,6 +135,14 @@ def transcribe_audio(
 		"--print-colors",
 		wav_name,
 	]
+	nice_value = _resolve_whisper_nice_value()
+	if nice_value is not None:
+		nice_bin = shutil.which("nice")
+		if nice_bin:
+			whisper_cmd = [nice_bin, "-n", str(nice_value)] + whisper_cmd
+			print(f"{Colors.DARK_YELLOW}whisper-cli niceness: {nice_value}{Colors.ENDC}")
+		else:
+			print(f"{Colors.DARK_YELLOW}'nice' not found; running whisper-cli at default priority.{Colors.ENDC}")
 	whisper_result = subprocess.run(
 		whisper_cmd,
 		capture_output=True,
