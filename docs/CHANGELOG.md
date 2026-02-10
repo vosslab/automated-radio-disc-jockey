@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-02-10
+- Add `docs/active_plans/LLM_GUARDRAIL_TOLERANCE_REFACTOR_PLAN.md` with a phased manager plan to move LLM handling from strict rejection toward tolerant parsing, bounded retries, and fallback-first execution.
+
 ## 2026-02-04
 - Drop the explicit TTS volume gain stage now that compand + norm handle levels.
 - Replace the post-compand gain cut with SoX norm -1 for peak normalization.
