@@ -71,10 +71,32 @@ class DiscJockey:
 		self.history = HistoryLogger()
 		self.model_name = llm_wrapper.get_default_model_name()
 		tts_helpers.DEFAULT_ENGINE = args.tts_engine
+		self.played_log_path = os.path.join("output", "played_files.log")
+		self.played_paths: set[str] = set()
+		self._reset_played_log()
 
 	#============================================
 	def log_intro(self, song: audio_utils.Song, intro: str) -> None:
 		self.history.log(song.path, intro)
+
+	#============================================
+	def _reset_played_log(self) -> None:
+		output_dir = os.path.dirname(self.played_log_path)
+		if output_dir:
+			os.makedirs(output_dir, exist_ok=True)
+		with open(self.played_log_path, "w", encoding="utf-8") as handle:
+			handle.write("")
+
+	#============================================
+	def _record_played_song(self, song: audio_utils.Song | None) -> None:
+		if not song or not song.path:
+			return
+		abs_path = os.path.abspath(song.path)
+		if abs_path in self.played_paths:
+			return
+		self.played_paths.add(abs_path)
+		with open(self.played_log_path, "a", encoding="utf-8") as handle:
+			handle.write(f"{abs_path}\n")
 
 	#============================================
 	def choose_next(self, last_song: audio_utils.Song) -> audio_utils.Song | None:
@@ -84,6 +106,7 @@ class DiscJockey:
 				last_song,
 				self.song_paths,
 				self.args.sample_size,
+				excluded_paths=self.played_paths,
 			)
 			if not candidates:
 				print(
@@ -162,7 +185,15 @@ class DiscJockey:
 			print(f"{Colors.WARNING}Falling back to random candidate: {file_name}{Colors.ENDC}")
 			return chosen
 
-		other_paths = [path for path in self.song_paths if path != last_song.path]
+		last_abs = os.path.abspath(last_song.path)
+		other_paths = []
+		for path in self.song_paths:
+			abs_path = os.path.abspath(path)
+			if abs_path == last_abs:
+				continue
+			if abs_path in self.played_paths:
+				continue
+			other_paths.append(path)
 		if not other_paths:
 			print(f"{Colors.FAIL}No fallback songs available; ending session.{Colors.ENDC}")
 			return None
@@ -300,6 +331,7 @@ class DiscJockey:
 		while True:
 			self.prepare_and_speak_intro(self.current_song, use_queue=True)
 			playback_helpers.play_song(self.current_song)
+			self._record_played_song(self.current_song)
 
 			# Prepare next song and intro concurrently while current is playing
 			self.next_song = None

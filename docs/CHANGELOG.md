@@ -1,6 +1,8 @@
 # Changelog
 
 ## 2026-02-10
+- Close and archive `LLM_GUARDRAIL_TOLERANCE_REFACTOR_PLAN.md` with final closeout evidence; Gate D is closed by approved release exception (expiry `2026-03-15`).
+- Track played files per run in `output/played_files.log` (overwrite on startup) and exclude previously played tracks from next-song candidate selection and fallback picks.
 - Launch whisper.cpp transcription with reduced CPU priority via `nice` (default `WHISPER_NICE=19`, configurable/disable-able) to reduce playback contention during lyric transcription.
 - Tune SoX compand output gain (`-8`) to curb mid-phrase peaking while keeping normalization as the final stage (`norm -3` in current settings).
 - Remove the last shape-only intro retry gate in `prepare_and_speak_intro` (short but non-empty intros no longer trigger retry), and refresh plan evidence/status wording from current `output/llm_responses.log` reruns.

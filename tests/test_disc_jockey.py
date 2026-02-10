@@ -1,3 +1,4 @@
+import os
 from types import SimpleNamespace
 
 import disc_jockey
@@ -187,3 +188,48 @@ def test_prepare_and_speak_intro_accepts_brief_usable_intro_without_retry(monkey
 
 	dj.prepare_and_speak_intro(song, use_queue=False)
 	assert calls["count"] == 1
+
+
+#============================================
+def test_record_played_song_appends_unique_paths(tmp_path) -> None:
+	dj = _make_disc_jockey()
+	dj.played_log_path = str(tmp_path / "played_files.log")
+	dj.played_paths = set()
+	dj._reset_played_log()
+	song = _FakeSong("/music/track.mp3", "Artist", "Album", "Title")
+
+	dj._record_played_song(song)
+	dj._record_played_song(song)
+
+	with open(dj.played_log_path, "r", encoding="utf-8") as handle:
+		lines = [line.strip() for line in handle if line.strip()]
+	assert lines == [os.path.abspath("/music/track.mp3")]
+	assert os.path.abspath("/music/track.mp3") in dj.played_paths
+
+
+#============================================
+def test_choose_next_passes_played_paths_to_candidate_builder(monkeypatch) -> None:
+	dj = _make_disc_jockey()
+	dj.song_paths = ["/music/current.mp3", "/music/next.mp3"]
+	dj.args = SimpleNamespace(sample_size=2)
+	dj.model_name = "fake-model"
+	dj.played_paths = {os.path.abspath("/music/current.mp3")}
+
+	last_song = _FakeSong("/music/current.mp3", "Artist", "Album", "Title")
+	next_song = _FakeSong("/music/next.mp3", "Other", "Album", "Next")
+	captured = {}
+
+	def fake_build_candidate_songs(current_song, song_paths, sample_size, excluded_paths=None):
+		captured["excluded_paths"] = set(excluded_paths or set())
+		return [next_song]
+
+	def fake_choose_next_song(*_args, **_kwargs):
+		return next_song_selector.SelectionResult(next_song, "next.mp3", "reason", "next.mp3")
+
+	monkeypatch.setattr(disc_jockey.next_song_selector, "build_candidate_songs", fake_build_candidate_songs)
+	monkeypatch.setattr(disc_jockey.next_song_selector, "choose_next_song", fake_choose_next_song)
+	monkeypatch.setattr(disc_jockey.DiscJockey, "_print_candidate_pool", lambda *_args, **_kwargs: None)
+
+	chosen = dj.choose_next(last_song)
+	assert chosen is next_song
+	assert os.path.abspath("/music/current.mp3") in captured["excluded_paths"]

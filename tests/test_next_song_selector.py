@@ -133,3 +133,42 @@ def test_choose_next_song_accepts_short_human_reason_without_retry(monkeypatch) 
 	assert calls["count"] == 1
 	assert result.song is candidate_a
 	assert result.reason == "Smooth handoff."
+
+
+#============================================
+def test_build_candidate_songs_excludes_played_paths(monkeypatch) -> None:
+	current_song = _make_song(
+		"/music/current.mp3",
+		"Current Artist",
+		"Current Album",
+		"Current Title",
+	)
+	song_list = [
+		"/music/current.mp3",
+		"/music/alpha.mp3",
+		"/music/bravo.mp3",
+		"/music/charlie.mp3",
+	]
+
+	monkeypatch.setattr(
+		next_song_selector.audio_utils,
+		"select_song_list",
+		lambda paths, sample_size: list(paths)[:sample_size],
+	)
+
+	def fake_song(path: str):
+		name = path.split("/")[-1]
+		return SimpleNamespace(path=path, artist=f"Artist {name}", album="Album", title=name)
+
+	monkeypatch.setattr(next_song_selector, "Song", fake_song)
+	candidates = next_song_selector.build_candidate_songs(
+		current_song,
+		song_list,
+		4,
+		excluded_paths={"/music/bravo.mp3"},
+	)
+	candidate_paths = [song.path for song in candidates]
+	assert "/music/current.mp3" not in candidate_paths
+	assert "/music/bravo.mp3" not in candidate_paths
+	assert "/music/alpha.mp3" in candidate_paths
+	assert "/music/charlie.mp3" in candidate_paths
