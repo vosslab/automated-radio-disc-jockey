@@ -47,6 +47,24 @@
   `polish_intro_for_reading` / related helpers take `client` instead of
   `model_name`.
 
+### Fixes and Maintenance
+
+- `README.md`: replace hard-coded Homebrew interpreter path in Quick
+  start with the repo-standard `source source_me.sh && python3 -m pip
+  install ...` bootstrap.
+- `docs/INSTALL.md`: prefix pip install with `source source_me.sh`;
+  add a "Verify install" section running `./disc_jockey.py --help`.
+- `docs/USAGE.md`: prefix `./disc_jockey.py` examples with
+  `source source_me.sh &&` so copy-paste works from a fresh shell.
+- Move `ARCHITECTURE.md` -> `docs/CODE_ARCHITECTURE.md` (via `git mv`) and
+  refresh it with clickable file-path links, an Overview section,
+  Extension points, Testing and verification, and a Known gaps list.
+- Add `docs/FILE_STRUCTURE.md` with top-level layout, key subtrees
+  (`prompts/`, `local-llm-wrapper/`, `tests/`), documentation map,
+  generated artifacts, and a "Where to add new work" section.
+- `README.md`: link to `docs/CODE_ARCHITECTURE.md` and
+  `docs/FILE_STRUCTURE.md` from the Documentation list.
+
 ### Removals and Deprecations
 
 - Remove `DJ_LLM_BACKEND` and `OLLAMA_MODEL` environment variables. They

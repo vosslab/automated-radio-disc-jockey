@@ -10,7 +10,12 @@ This repo expects Python 3.12 and local audio tooling for TTS playback.
 
 ## Python dependencies
 ```bash
-python3.12 -m pip install -r pip_requirements.txt
+source source_me.sh && python3 -m pip install -r pip_requirements.txt
+```
+
+## Verify install
+```bash
+source source_me.sh && ./disc_jockey.py --help
 ```
 
 ## LLM backends

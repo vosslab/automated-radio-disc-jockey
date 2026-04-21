@@ -5,12 +5,14 @@ Automated Radio Disc Jockey is an AI-powered local DJ for people who want a radi
 ## Documentation
 - [docs/INSTALL.md](docs/INSTALL.md): Setup and dependencies.
 - [docs/USAGE.md](docs/USAGE.md): CLI usage and examples.
+- [docs/CODE_ARCHITECTURE.md](docs/CODE_ARCHITECTURE.md): Components and data flow.
+- [docs/FILE_STRUCTURE.md](docs/FILE_STRUCTURE.md): Directory map.
 - [docs/CHANGELOG.md](docs/CHANGELOG.md): User-facing changes by date.
 - [docs/AUTHORS.md](docs/AUTHORS.md): Maintainer and contributor information.
 
 ## Quick start
 ```bash
-/opt/homebrew/opt/python@3.12/bin/python3.12 -m pip install -r pip_requirements.txt
+source source_me.sh && python3 -m pip install -r pip_requirements.txt
 ./disc_jockey.py -d /path/to/music -n 5 --tts-engine say --testing
 ```
 

@@ -2,7 +2,7 @@
 
 ## Full loop
 ```bash
-./disc_jockey.py -d /path/to/music -n 10 --tts-engine say --testing
+source source_me.sh && ./disc_jockey.py -d /path/to/music -n 10 --tts-engine say --testing
 ```
 
 ## Metadata lookup
@@ -45,9 +45,9 @@ The old `DJ_LLM_BACKEND` and `OLLAMA_MODEL` env vars have been removed.
 
 | Before | After |
 | --- | --- |
-| `DJ_LLM_BACKEND=ollama ./disc_jockey.py -d music` | `./disc_jockey.py --ollama -d music` |
-| `DJ_LLM_BACKEND=ollama OLLAMA_MODEL=phi4:14b-q4_K_M ./disc_jockey.py -d music` | `./disc_jockey.py -m phi4:14b-q4_K_M -d music` |
-| `DJ_LLM_BACKEND=afm ./disc_jockey.py -d music` | `./disc_jockey.py -d music` (AFM is the default) |
+| `DJ_LLM_BACKEND=ollama ./disc_jockey.py -d music` | `source source_me.sh && ./disc_jockey.py --ollama -d music` |
+| `DJ_LLM_BACKEND=ollama OLLAMA_MODEL=phi4:14b-q4_K_M ./disc_jockey.py -d music` | `source source_me.sh && ./disc_jockey.py -m phi4:14b-q4_K_M -d music` |
+| `DJ_LLM_BACKEND=afm ./disc_jockey.py -d music` | `source source_me.sh && ./disc_jockey.py -d music` (AFM is the default) |
 
 Backend dispatch is delegated to the vendored `local_llm_wrapper` package
 (in-tree at `local_llm_wrapper/`). The DJ repo keeps its own tolerant
