@@ -64,6 +64,14 @@
   generated artifacts, and a "Where to add new work" section.
 - `README.md`: link to `docs/CODE_ARCHITECTURE.md` and
   `docs/FILE_STRUCTURE.md` from the Documentation list.
+- `audio_wav.create_transcription_wav` now decodes and resamples via SoX
+  (new `_create_wav_with_sox` helper) instead of routing through the
+  pygame mixer. Fixes the 16 kHz vs 44.1 kHz mismatch caused by
+  `ensure_mixer_initialized` short-circuiting once playback has
+  initialized the mixer at 44100 Hz, and eliminates the libmpg123
+  "Illegal Audio-MPEG-Header / Trying to resync" noise from the
+  transcription path (playback path is unchanged). SoX is already a
+  system dependency via `tts_helpers`, so no new requirements.
 
 ### Removals and Deprecations
 

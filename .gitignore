@@ -2,5 +2,5 @@ benchmarks/
 .DS_Store
 output/
 history.log
-local-llm-wrapper/
+local-llm-wrapper
 report_*.txt

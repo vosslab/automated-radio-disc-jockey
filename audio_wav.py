@@ -1,6 +1,8 @@
 # Standard Library
 import array
 import os
+import shutil
+import subprocess
 import tempfile
 import wave
 
@@ -141,5 +143,45 @@ def create_playback_wav(audio_path: str) -> str | None:
 	return create_temp_wav(audio_path, DEFAULT_PLAYBACK_RATE, channels=2, size=-16)
 
 #============================================
+def _create_wav_with_sox(audio_path: str, rate: int, channels: int) -> str | None:
+	"""
+	Decode and resample audio with SoX to a 16-bit PCM WAV at the requested
+	rate and channel count. Bypasses pygame.mixer so the running playback
+	mixer (usually 44.1 kHz stereo) is not disturbed.
+	"""
+	if not audio_path:
+		return None
+	if not os.path.isfile(audio_path):
+		print(f"{Colors.WARNING}Audio file not found: {escape(audio_path)}{Colors.ENDC}")
+		return None
+
+	sox_bin = shutil.which("sox")
+	if not sox_bin:
+		print(f"{Colors.WARNING}sox not found in PATH; cannot prepare transcription WAV.{Colors.ENDC}")
+		return None
+
+	with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as handle:
+		temp_path = handle.name
+
+	command = [
+		sox_bin,
+		audio_path,
+		"-r", str(rate),
+		"-c", str(channels),
+		"-b", "16",
+		temp_path,
+	]
+	result = subprocess.run(command, capture_output=True, text=True)
+	if result.returncode != 0:
+		error_text = result.stderr.strip() or result.stdout.strip()
+		print(f"{Colors.WARNING}sox failed to decode audio: {escape(error_text)}{Colors.ENDC}")
+		try:
+			os.unlink(temp_path)
+		except OSError:
+			pass
+		return None
+	return temp_path
+
+#============================================
 def create_transcription_wav(audio_path: str) -> str | None:
-	return create_temp_wav(audio_path, DEFAULT_TRANSCRIBE_RATE, channels=1, size=-16)
+	return _create_wav_with_sox(audio_path, DEFAULT_TRANSCRIBE_RATE, channels=1)
