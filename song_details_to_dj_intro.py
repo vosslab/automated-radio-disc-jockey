@@ -76,6 +76,8 @@ def parse_args() -> argparse.Namespace:
 	parser.add_argument("-t", "--text", dest="text", help="Raw paragraph about a song to use directly (skips metadata lookup).")
 	parser.add_argument("--simple", dest="use_metadata", action="store_false", help="Use simple prompt (no metadata).")
 	parser.add_argument("--metadata", dest="use_metadata", action="store_true", help="Use metadata-based prompt (default).")
+	parser.add_argument("-O", "--ollama", dest="use_ollama", action="store_true", help="Use Ollama backend instead of Apple Foundation Models.")
+	parser.add_argument("-m", "--model", dest="model", type=str, default=None, help="Model name to use (for Ollama).")
 	parser.set_defaults(use_metadata=True)
 	return parser.parse_args()
 
@@ -206,7 +208,7 @@ def _strip_leading_boilerplate_sentence(text: str) -> str:
 def _finalize_intro_text(
 	text: str,
 	song: audio_utils.Song,
-	model_name: str | None,
+	client,
 	allow_refine: bool,
 	reason_hint: str = "",
 ) -> str | None:
@@ -217,20 +219,20 @@ def _finalize_intro_text(
 		return None
 	lowered = clean_intro.lower()
 	if "fact:" in lowered or "trivia:" in lowered:
-		return _refine_or_none(clean_intro, song, model_name, allow_refine, "contains FACT/TRIVIA")
+		return _refine_or_none(clean_intro, song, client, allow_refine, "contains FACT/TRIVIA")
 	if "<" in clean_intro and ">" in clean_intro:
-		return _refine_or_none(clean_intro, song, model_name, allow_refine, "contains markup")
+		return _refine_or_none(clean_intro, song, client, allow_refine, "contains markup")
 	if len(clean_intro) > MAX_INTRO_CHARS:
-		return _refine_or_none(clean_intro, song, model_name, allow_refine, "too long")
+		return _refine_or_none(clean_intro, song, client, allow_refine, "too long")
 	if _starts_with_boilerplate(clean_intro):
 		clean_intro = _strip_leading_boilerplate_sentence(clean_intro)
 		if not clean_intro:
-			return _refine_or_none(text, song, model_name, allow_refine, "boilerplate opening")
+			return _refine_or_none(text, song, client, allow_refine, "boilerplate opening")
 	sentence_count = _estimate_sentence_count(clean_intro)
 	if sentence_count < MIN_INTRO_SENTENCES or sentence_count > MAX_INTRO_SENTENCES:
-		return _refine_or_none(clean_intro, song, model_name, allow_refine, "sentence count out of range")
+		return _refine_or_none(clean_intro, song, client, allow_refine, "sentence count out of range")
 	if _has_excessive_repetition(clean_intro):
-		return _refine_or_none(clean_intro, song, model_name, allow_refine, "repetition")
+		return _refine_or_none(clean_intro, song, client, allow_refine, "repetition")
 
 	if not _title_is_mentioned(clean_intro, song.title or ""):
 		print(f"{Colors.DARK_YELLOW}Intro missing song title; allowing output.{Colors.ENDC}")
@@ -245,22 +247,22 @@ def _finalize_intro_text(
 def _refine_or_none(
 	text: str,
 	song: audio_utils.Song,
-	model_name: str | None,
+	client,
 	allow_refine: bool,
 	reason: str,
 ) -> str | None:
 	if not allow_refine:
 		return None
-	refined = _refine_intro_with_llm(text, song, model_name, reason)
+	refined = _refine_intro_with_llm(text, song, client, reason)
 	if refined:
-		return _finalize_intro_text(refined, song, model_name, False, reason_hint=reason)
+		return _finalize_intro_text(refined, song, client, False, reason_hint=reason)
 	return None
 
 #============================================
 def _refine_intro_with_llm(
 	text: str,
 	song: audio_utils.Song,
-	model_name: str | None,
+	client,
 	reason: str,
 ) -> str | None:
 	if not text:
@@ -275,7 +277,7 @@ def _refine_intro_with_llm(
 			"intro_text": text,
 		},
 	)
-	refined = llm_wrapper.run_llm(prompt, model_name=model_name)
+	refined = llm_wrapper.run_llm(prompt, client=client)
 	if not refined:
 		return None
 	extracted_result = llm_wrapper.extract_tag_result(refined, "response")
@@ -302,7 +304,7 @@ def _refine_intro_with_llm(
 def polish_intro_for_reading(
 	intro_text: str,
 	song: audio_utils.Song,
-	model_name: str | None,
+	client,
 ) -> str | None:
 	"""
 	Run a final LLM cleanup pass after the referee selects an intro.
@@ -315,7 +317,7 @@ def polish_intro_for_reading(
 	refined = _refine_intro_with_llm(
 		intro_text,
 		song,
-		model_name,
+		client,
 		"final pass before playback",
 	)
 	if refined:
@@ -328,9 +330,9 @@ def polish_intro_for_reading(
 		)
 
 	candidate = refined or intro_text
-	final_intro = _finalize_intro_text(candidate, song, model_name, False)
+	final_intro = _finalize_intro_text(candidate, song, client, False)
 	if not final_intro and refined:
-		final_intro = _finalize_intro_text(intro_text, song, model_name, False)
+		final_intro = _finalize_intro_text(intro_text, song, client, False)
 	return final_intro or candidate
 
 #============================================
@@ -509,8 +511,8 @@ def _salvage_intro_from_raw_output(raw_text: str, song: audio_utils.Song) -> str
 #============================================
 def prepare_intro_text(
 	song: audio_utils.Song,
+	client,
 	prev_song: audio_utils.Song | None = None,
-	model_name: str | None = None,
 	details_text: str | None = None,
 	allow_fallback: bool = True,
 	lyrics_text: str | None = None,
@@ -520,9 +522,8 @@ def prepare_intro_text(
 
 	Args:
 		song (audio_utils.Song): Song object for the current track.
+		client: LLMClient from llm_wrapper.create_llm_client. Required.
 		prev_song (audio_utils.Song | None): Optional previous song for transition.
-		model_name (str | None): Name of the Ollama model to use. If None, the
-			function will let llm_wrapper choose a model.
 
 	Returns:
 		str | None: Cleaned intro text inside <response> tags, or None on failure.
@@ -544,7 +545,7 @@ def prepare_intro_text(
 	)
 
 	print(f"{Colors.SKY_BLUE}Sending prompt to LLM...{Colors.ENDC}")
-	dj_intro = llm_wrapper.run_llm(prompt, model_name=model_name)
+	dj_intro = llm_wrapper.run_llm(prompt, client=client)
 
 	print(f"{Colors.LIME_GREEN}Received LLM output; extracting <response> block...{Colors.ENDC}")
 	def _use_relaxed_intro(reason: str) -> str | None:
@@ -582,7 +583,7 @@ def prepare_intro_text(
 		refined_intro = _refine_intro_with_llm(
 			clean_intro,
 			song,
-			model_name,
+			client,
 			"polish for clarity and remove filler",
 		)
 		if refined_intro:
@@ -594,9 +595,9 @@ def prepare_intro_text(
 				f"sentences {before_sentences}->{after_sentences}{Colors.ENDC}"
 			)
 		candidate_intro = refined_intro or clean_intro
-		final_intro = _finalize_intro_text(candidate_intro, song, model_name, False)
+		final_intro = _finalize_intro_text(candidate_intro, song, client, False)
 		if not final_intro and refined_intro:
-			final_intro = _finalize_intro_text(clean_intro, song, model_name, False)
+			final_intro = _finalize_intro_text(clean_intro, song, client, False)
 		if final_intro:
 			print(f"Extracted intro length: {len(final_intro)} characters.")
 			return final_intro
@@ -709,6 +710,7 @@ def main() -> None:
 		raise ValueError("Provide a song file (-i) or raw text (-t).")
 	song_obj = audio_utils.Song(args.input_file) if args.input_file else None
 	prev_song = None
+	client = llm_wrapper.create_llm_client(args.model, args.use_ollama or bool(args.model))
 
 	if args.text:
 		prompt = build_prompt(song=None, raw_text=args.text, prev_song=prev_song, details_text=None)
@@ -730,7 +732,7 @@ def main() -> None:
 		)
 
 	print(f"{Colors.SKY_BLUE}Sending prompt to LLM...{Colors.ENDC}")
-	raw = llm_wrapper.run_llm(prompt)
+	raw = llm_wrapper.run_llm(prompt, client=client)
 	intro = llm_wrapper.extract_response_text(raw)
 	if intro:
 		print(f"{Colors.PURPLE}DJ Intro:{Colors.ENDC}")

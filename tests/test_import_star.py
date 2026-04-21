@@ -2,26 +2,13 @@ import ast
 import os
 import tokenize
 
+import pytest
+
 import git_file_utils
 
-SCOPE_ENV = "REPO_HYGIENE_SCOPE"
-FAST_ENV = "FAST_REPO_HYGIENE"
-SKIP_ENV = "SKIP_REPO_HYGIENE"
-REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+REPO_ROOT = git_file_utils.get_repo_root()
 SKIP_DIRS = {".git", ".venv", "__pycache__", "old_shell_folder"}
-
-
-#============================================
-def resolve_scope() -> str:
-	"""
-	Resolve the scan scope from environment.
-	"""
-	scope = os.environ.get(SCOPE_ENV, "").strip().lower()
-	if not scope and os.environ.get(FAST_ENV) == "1":
-		scope = "changed"
-	if scope in ("all", "changed"):
-		return scope
-	return "all"
+REPORT_NAME = "report_import_star.txt"
 
 
 #============================================
@@ -132,32 +119,53 @@ def format_issue(rel_path: str, line_no: int, module_name: str) -> str:
 	return f"{rel_path}:{line_no}: import *"
 
 
+_FILES = git_file_utils.collect_files(REPO_ROOT, gather_files, gather_changed_files)
+
+
 #============================================
-def test_import_star() -> None:
+@pytest.fixture(scope="module", autouse=True)
+def reset_import_star_report() -> None:
 	"""
-	Report import * usage.
+	Remove stale report file before this module runs.
 	"""
-	if os.environ.get(SKIP_ENV) == "1":
+	report_path = os.path.join(REPO_ROOT, REPORT_NAME)
+	if os.path.exists(report_path):
+		os.remove(report_path)
+
+
+#============================================
+def append_import_star_report(issues: list[str]) -> str:
+	"""
+	Append import-star violations to the dedicated report file.
+	"""
+	report_path = os.path.join(REPO_ROOT, REPORT_NAME)
+	file_exists = os.path.exists(report_path)
+	with open(report_path, "a", encoding="utf-8") as handle:
+		if not file_exists:
+			handle.write("Import star report\n")
+			handle.write("Violations:\n")
+		for issue in issues:
+			handle.write(issue + "\n")
+	return report_path
+
+
+#============================================
+@pytest.mark.parametrize(
+	"file_path", _FILES,
+	ids=lambda p: os.path.relpath(p, REPO_ROOT),
+)
+def test_import_star(file_path: str) -> None:
+	"""Report import * usage in a single Python file."""
+	matches = find_import_star(file_path)
+	if not matches:
 		return
-
-	scope = resolve_scope()
-	if scope == "changed":
-		paths = gather_changed_files(REPO_ROOT)
-	else:
-		paths = gather_files(REPO_ROOT)
-
-	if not paths:
-		print(f"import *: no Python files matched scope {scope}.")
-		return
-
-	issues = []
-	for path in paths:
-		matches = find_import_star(path)
-		if not matches:
-			continue
-		rel_path = os.path.relpath(path, REPO_ROOT)
-		for line_no, module_name in matches:
-			issues.append(format_issue(rel_path, line_no, module_name))
-
-	if issues:
-		raise AssertionError("import * usage detected:\n" + "\n".join(issues))
+	rel_path = os.path.relpath(file_path, REPO_ROOT)
+	issues = [format_issue(rel_path, line_no, module_name) for line_no, module_name in matches]
+	issues = sorted(set(issues))
+	report_path = append_import_star_report(issues)
+	display_report = os.path.relpath(report_path, REPO_ROOT)
+	raise AssertionError(
+		"import * usage detected:\n"
+		+ "\n".join(issues)
+		+ f"\nFull report: {display_report}"
+	)

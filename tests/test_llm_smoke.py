@@ -37,13 +37,13 @@ def test_llm_smoke_next_song_selection() -> None:
 		song_paths.append(current_path)
 
 	current_song = audio_utils.Song(current_path)
-	model_name = llm_wrapper.get_default_model_name()
+	client = llm_wrapper.create_llm_client(None, use_ollama=False)
 
 	result = next_song_selector.choose_next_song(
 		current_song,
 		song_paths,
 		sample_size=8,
-		model_name=model_name,
+		client=client,
 		show_candidates=False,
 	)
 
@@ -57,11 +57,11 @@ def test_llm_smoke_next_song_selection() -> None:
 def test_llm_smoke_dj_intro() -> None:
 	current_path = _get_env_path("LLM_SMOKE_CURRENT")
 	song = audio_utils.Song(current_path)
-	model_name = llm_wrapper.get_default_model_name()
+	client = llm_wrapper.create_llm_client(None, use_ollama=False)
 
 	intro = song_details_to_dj_intro.prepare_intro_text(
 		song,
-		model_name=model_name,
+		client=client,
 		allow_fallback=True,
 	)
 

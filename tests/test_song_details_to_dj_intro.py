@@ -4,6 +4,12 @@ import song_details_to_dj_intro
 
 
 #============================================
+def _make_mock_client() -> SimpleNamespace:
+	"""Create a mock LLMClient for testing."""
+	return SimpleNamespace()
+
+
+#============================================
 def test_estimate_sentence_count_ignores_short_fragments() -> None:
 	text = "Hi there. Ok? This is a test."
 	assert song_details_to_dj_intro._estimate_sentence_count(text) == 1
@@ -135,7 +141,7 @@ def test_prepare_intro_text_recovers_without_response_from_usable_prose(monkeypa
 	monkeypatch.setattr(
 		song_details_to_dj_intro.llm_wrapper,
 		"run_llm",
-		lambda prompt, model_name=None, **kwargs: (
+		lambda prompt, client=None, **kwargs: (
 			"<facts>\n"
 			"FACT: A.\nFACT: B.\nFACT: C.\nFACT: D.\nFACT: E.\nFACT: F.\n"
 			"</facts>\n"
@@ -145,7 +151,7 @@ def test_prepare_intro_text_recovers_without_response_from_usable_prose(monkeypa
 	)
 	result = song_details_to_dj_intro.prepare_intro_text(
 		song,
-		model_name="fake",
+		client=_make_mock_client(),
 		details_text="details",
 		lyrics_text="",
 	)
@@ -160,7 +166,7 @@ def test_prepare_intro_text_salvages_noisy_unclosed_output(monkeypatch) -> None:
 	monkeypatch.setattr(
 		song_details_to_dj_intro.llm_wrapper,
 		"run_llm",
-		lambda prompt, model_name=None, **kwargs: (
+		lambda prompt, client=None, **kwargs: (
 			"<facts>\n"
 			"FACT: rough note\n"
 			"TRIVIA: sketch note\n"
@@ -170,7 +176,7 @@ def test_prepare_intro_text_salvages_noisy_unclosed_output(monkeypatch) -> None:
 	)
 	result = song_details_to_dj_intro.prepare_intro_text(
 		song,
-		model_name="fake",
+		client=_make_mock_client(),
 		details_text="details",
 		lyrics_text="",
 	)
@@ -185,13 +191,13 @@ def test_prepare_intro_text_keeps_usable_response_when_finalize_fails(monkeypatc
 	monkeypatch.setattr(
 		song_details_to_dj_intro.llm_wrapper,
 		"run_llm",
-		lambda prompt, model_name=None, **kwargs: "<response>Short but usable handoff line.</response>",
+		lambda prompt, client=None, **kwargs: "<response>Short but usable handoff line.</response>",
 	)
 	monkeypatch.setattr(song_details_to_dj_intro, "_finalize_intro_text", lambda *_args, **_kwargs: None)
 	monkeypatch.setattr(song_details_to_dj_intro, "_build_relaxed_intro", lambda *_args, **_kwargs: None)
 	result = song_details_to_dj_intro.prepare_intro_text(
 		song,
-		model_name="fake",
+		client=_make_mock_client(),
 		details_text="details",
 		lyrics_text="",
 	)

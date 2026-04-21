@@ -20,7 +20,7 @@ class _FakeSong:
 #============================================
 def _make_disc_jockey() -> disc_jockey.DiscJockey:
 	dj = object.__new__(disc_jockey.DiscJockey)
-	dj.model_name = "fake-model"
+	dj.client = object()
 	return dj
 
 
@@ -35,7 +35,7 @@ def test_run_intro_referee_accepts_labeled_winner(monkeypatch) -> None:
 	monkeypatch.setattr(
 		disc_jockey.llm_wrapper,
 		"run_llm",
-		lambda prompt, model_name=None, **kwargs: "winner: B\nreason: better transition",
+		lambda prompt, client=None, **kwargs:"winner: B\nreason: better transition",
 	)
 
 	result = dj._run_intro_referee(song, None, candidates, "details")
@@ -53,7 +53,7 @@ def test_run_intro_referee_accepts_missing_close_winner_tag(monkeypatch) -> None
 	monkeypatch.setattr(
 		disc_jockey.llm_wrapper,
 		"run_llm",
-		lambda prompt, model_name=None, **kwargs: "<winner>A",
+		lambda prompt, client=None, **kwargs:"<winner>A",
 	)
 
 	result = dj._run_intro_referee(song, None, candidates, "details")
@@ -82,7 +82,7 @@ def test_run_song_referee_accepts_labeled_filename_winner(monkeypatch) -> None:
 	monkeypatch.setattr(
 		disc_jockey.llm_wrapper,
 		"run_llm",
-		lambda prompt, model_name=None, **kwargs: "winner: bravo.mp3\nreason: smoother transition",
+		lambda prompt, client=None, **kwargs:"winner: bravo.mp3\nreason: smoother transition",
 	)
 
 	chosen = dj._run_referee(current_song, candidates, results)
@@ -212,7 +212,7 @@ def test_choose_next_passes_played_paths_to_candidate_builder(monkeypatch) -> No
 	dj = _make_disc_jockey()
 	dj.song_paths = ["/music/current.mp3", "/music/next.mp3"]
 	dj.args = SimpleNamespace(sample_size=2)
-	dj.model_name = "fake-model"
+	dj.client = object()
 	dj.played_paths = {os.path.abspath("/music/current.mp3")}
 
 	last_song = _FakeSong("/music/current.mp3", "Artist", "Album", "Title")

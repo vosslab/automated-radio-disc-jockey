@@ -9,6 +9,12 @@ def _make_song(path: str, artist: str, album: str, title: str) -> SimpleNamespac
 
 
 #============================================
+def _make_mock_client() -> SimpleNamespace:
+	"""Create a mock LLMClient for testing."""
+	return SimpleNamespace()
+
+
+#============================================
 def test_choose_next_song_accepts_labeled_fallback(monkeypatch) -> None:
 	current_song = _make_song(
 		"/music/current.mp3",
@@ -20,7 +26,7 @@ def test_choose_next_song_accepts_labeled_fallback(monkeypatch) -> None:
 	candidate_b = _make_song("/music/bravo.mp3", "Artist B", "Album B", "Bravo")
 	candidates = [candidate_a, candidate_b]
 
-	def fake_run_llm(prompt: str, model_name: str | None = None, **kwargs) -> str:
+	def fake_run_llm(prompt: str, client=None, **kwargs) -> str:
 		return "choice: alpha.mp3\nreason: This keeps the tone aligned and avoids a harsh jump."
 
 	monkeypatch.setattr(next_song_selector.llm_wrapper, "run_llm", fake_run_llm)
@@ -28,7 +34,7 @@ def test_choose_next_song_accepts_labeled_fallback(monkeypatch) -> None:
 		current_song,
 		[current_song.path, candidate_a.path, candidate_b.path],
 		2,
-		model_name="fake",
+		client=_make_mock_client(),
 		candidates=candidates,
 		show_candidates=False,
 	)
@@ -51,7 +57,7 @@ def test_choose_next_song_uses_fallback_reason_without_retry_when_choice_is_usab
 
 	calls = {"count": 0}
 
-	def fake_run_llm(prompt: str, model_name: str | None = None, **kwargs) -> str:
+	def fake_run_llm(prompt: str, client=None, **kwargs) -> str:
 		calls["count"] += 1
 		return "<choice>alpha.mp3</choice><reason>P,G,I,S,T,M,CA=9</reason>"
 
@@ -60,7 +66,7 @@ def test_choose_next_song_uses_fallback_reason_without_retry_when_choice_is_usab
 		current_song,
 		[current_song.path, candidate_a.path, candidate_b.path],
 		2,
-		model_name="fake",
+		client=_make_mock_client(),
 		candidates=candidates,
 		show_candidates=False,
 	)
@@ -83,7 +89,7 @@ def test_choose_next_song_retries_once_when_choice_and_reason_are_unusable(monke
 
 	calls = {"count": 0}
 
-	def fake_run_llm(prompt: str, model_name: str | None = None, **kwargs) -> str:
+	def fake_run_llm(prompt: str, client=None, **kwargs) -> str:
 		calls["count"] += 1
 		if calls["count"] == 1:
 			return "<choice>not_in_pool.mp3</choice><reason>WHY YOU PICKED: filename.mp3</reason>"
@@ -94,7 +100,7 @@ def test_choose_next_song_retries_once_when_choice_and_reason_are_unusable(monke
 		current_song,
 		[current_song.path, candidate_a.path, candidate_b.path],
 		2,
-		model_name="fake",
+		client=_make_mock_client(),
 		candidates=candidates,
 		show_candidates=False,
 	)
@@ -117,7 +123,7 @@ def test_choose_next_song_accepts_short_human_reason_without_retry(monkeypatch) 
 
 	calls = {"count": 0}
 
-	def fake_run_llm(prompt: str, model_name: str | None = None, **kwargs) -> str:
+	def fake_run_llm(prompt: str, client=None, **kwargs) -> str:
 		calls["count"] += 1
 		return "<choice>alpha.mp3</choice><reason>Smooth handoff.</reason>"
 
@@ -126,7 +132,7 @@ def test_choose_next_song_accepts_short_human_reason_without_retry(monkeypatch) 
 		current_song,
 		[current_song.path, candidate_a.path, candidate_b.path],
 		2,
-		model_name="fake",
+		client=_make_mock_client(),
 		candidates=candidates,
 		show_candidates=False,
 	)

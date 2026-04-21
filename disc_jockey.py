@@ -3,6 +3,9 @@
 # Standard Library
 import os
 import time
+import json
+import urllib.request
+import urllib.error
 import argparse
 import threading
 import re
@@ -31,6 +34,35 @@ MAX_NEXT_SONG_ATTEMPTS = 5
 RICH_CONSOLE = Console()
 
 #============================================
+def _validate_ollama_model(model: str, base_url: str = "http://localhost:11434") -> None:
+	"""Verify that model is installed locally in Ollama.
+
+	Args:
+		model: exact Ollama model name to check
+		base_url: Ollama server URL
+
+	Raises:
+		RuntimeError: if model is not available locally
+	"""
+	url = f"{base_url}/api/tags"
+	request = urllib.request.Request(url)
+	try:
+		response = urllib.request.urlopen(request, timeout=15)
+	except (urllib.error.URLError, TimeoutError):
+		raise RuntimeError(
+			f"Cannot connect to Ollama at {base_url}\n"
+			"Start Ollama first: ollama serve")
+	data = json.loads(response.read().decode("utf-8"))
+	local_models = [m["name"] for m in data.get("models", [])]
+	if model not in local_models:
+		installed_str = ", ".join(local_models) if local_models else "none"
+		msg = (f"Requested Ollama model not available locally: {model}\n"
+			f"Installed models: {installed_str}\n"
+			f"Install with: ollama pull {model}\n"
+			"Or run with --ollama to use the default RAM-selected model.")
+		raise RuntimeError(msg)
+
+#============================================
 class HistoryLogger:
 	"""
 	Append played songs and DJ intros to a history file.
@@ -54,6 +86,16 @@ def parse_args() -> argparse.Namespace:
 	parser.add_argument("-r", "--tts-speed", dest="tts_speed", type=float, default=1.2, help="Playback speed multiplier for the DJ intro.")
 	parser.add_argument("--tts-engine", choices=["say", "gtts", "pyttsx3"], default="say", help="TTS engine to use for DJ intros (default: macOS say).")
 	parser.add_argument("-t", "--testing", dest="testing", action="store_true", help="Testing mode: play only the first 20 seconds of each song.")
+	parser.add_argument(
+		"-O", "--ollama", dest="use_ollama", action="store_true",
+		help="Use Ollama instead of Apple Intelligence (auto-selects model by RAM)",  # Intentionally asymmetric: default is Apple auto, not a symmetric toggle.
+	)
+	parser.add_argument(
+		"-m", "--model", dest="model", type=str, default=None,
+		help=("Use Ollama with this exact local model (implies --ollama). "
+			"Examples: gpt-oss:20b, phi4:14b-q4_K_M, "
+			"llama3.2:3b-instruct-q5_K_M, llama3.2:1b-instruct-q4_K_M"),
+	)
 	return parser.parse_args()
 
 #============================================
@@ -69,7 +111,12 @@ class DiscJockey:
 		self.queued_intro_audio: str | None = None
 		self.previous_song: audio_utils.Song | None = None
 		self.history = HistoryLogger()
-		self.model_name = llm_wrapper.get_default_model_name()
+		use_ollama = args.use_ollama or bool(args.model)
+		if use_ollama and args.model:
+			_validate_ollama_model(args.model)
+		self.client = llm_wrapper.create_llm_client(args.model, use_ollama)
+		info = llm_wrapper.describe_client(self.client)
+		print(f"{Colors.SKY_BLUE}LLM backend: {info['backend']} model: {info['model']}{Colors.ENDC}")
 		tts_helpers.DEFAULT_ENGINE = args.tts_engine
 		self.played_log_path = os.path.join("output", "played_files.log")
 		self.played_paths: set[str] = set()
@@ -122,7 +169,7 @@ class DiscJockey:
 				last_song,
 				self.song_paths,
 				self.args.sample_size,
-				self.model_name,
+				self.client,
 				candidates=candidates,
 				show_candidates=False,
 			)
@@ -130,7 +177,7 @@ class DiscJockey:
 				last_song,
 				self.song_paths,
 				self.args.sample_size,
-				self.model_name,
+				self.client,
 				candidates=candidates,
 				show_candidates=False,
 			)
@@ -366,7 +413,7 @@ class DiscJockey:
 		return song_details_to_dj_intro.prepare_intro_text(
 			song,
 			prev_song=prev_song,
-			model_name=self.model_name,
+			client=self.client,
 		)
 
 	#============================================
@@ -406,7 +453,7 @@ class DiscJockey:
 				intro = song_details_to_dj_intro.prepare_intro_text(
 					song,
 					prev_song=prev_song,
-					model_name=self.model_name,
+					client=self.client,
 					details_text=details_text,
 					lyrics_text=lyrics_text,
 				)
@@ -444,7 +491,7 @@ class DiscJockey:
 			polished = song_details_to_dj_intro.polish_intro_for_reading(
 				best_intro,
 				song,
-				self.model_name,
+				self.client,
 			)
 			return polished or best_intro
 
@@ -479,7 +526,7 @@ class DiscJockey:
 			},
 		)
 
-		raw = llm_wrapper.run_llm(prompt, model_name=self.model_name, max_tokens=180)
+		raw = llm_wrapper.run_llm(prompt, client=self.client, max_tokens=180)
 		winner_result = llm_wrapper.extract_tag_result(raw, "winner")
 		reason_result = llm_wrapper.extract_tag_result(raw, "reason")
 		winner_text = winner_result.value
@@ -563,7 +610,7 @@ class DiscJockey:
 		max_attempts = 2
 		for attempt in range(max_attempts):
 			prompt = self._build_referee_prompt(current_song, candidate_lines, results)
-			raw = llm_wrapper.run_llm(prompt, model_name=self.model_name, max_tokens=180)
+			raw = llm_wrapper.run_llm(prompt, client=self.client, max_tokens=180)
 			raw_output = raw.strip() if raw else ""
 			winner_result = llm_wrapper.extract_tag_result(raw, "winner")
 			reason_result = llm_wrapper.extract_tag_result(raw, "reason")

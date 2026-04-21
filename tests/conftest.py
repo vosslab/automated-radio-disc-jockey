@@ -45,6 +45,16 @@ def pytest_addoption(parser) -> None:
 
 
 #============================================
+def pytest_configure(config) -> None:
+	"""
+	Register custom pytest markers.
+	"""
+	config.addinivalue_line(
+		"markers", "slow: marks tests as slow (for one-shot analysis)"
+	)
+
+
+#============================================
 @pytest.fixture
 def skip_repo_hygiene() -> bool:
 	"""

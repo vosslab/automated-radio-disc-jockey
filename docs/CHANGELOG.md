@@ -1,5 +1,86 @@
 # Changelog
 
+## 2026-04-21
+
+### Additions and New Features
+
+- Add pre-clean stage to `llm_wrapper.extract_tag_result`:
+  `normalize_llm_response_text` unwraps fenced code blocks, unescapes HTML
+  entities, and strips one layer of outer quotes before the existing
+  tolerant parser runs. `ParseResult` gains a backward-compatible
+  `preclean_applied: bool` field so callers can see when cleanup rescued
+  a previously-missing case.
+- Add `tests/test_parser_parity.py` with a pinned snapshot
+  (`tests/regression_reports/snapshot_20260421.log`, 1441 exchanges) and a
+  frozen pre-port parser copy at `tests/fixtures/legacy_parser.py`. The
+  test enforces a monotonic rule: no regression on previously-recovered
+  cases; improvements from pre-clean are allowed. Report artifact at
+  `tests/regression_reports/parser_parity_20260421.md`.
+- Vendor `local_llm_wrapper` as an in-tree subpackage at repo root so
+  `llm_wrapper.py` can import it with no shell-env dependency.
+
+### Behavior or Interface Changes
+
+- Add `-O/--ollama` and `-m/--model` CLI flags to `disc_jockey.py` and
+  `next_song_selector.py`. `--model` implies `--ollama`. Default (no
+  flags) uses Apple Foundation Models. The flag pair is intentionally
+  asymmetric (no `--no-ollama`) because the default is AFM-auto, not a
+  symmetric toggle.
+- `-m/--model` triggers a startup validation call to
+  `http://localhost:11434/api/tags`; the run aborts with the available-
+  models list if the requested model is missing. Plain `--ollama`
+  without a model skips validation.
+- `llm_wrapper.run_llm` signature: takes `client` (from
+  `create_llm_client`) instead of `model_name`. Backend/model metadata
+  is captured at client creation and surfaces via `describe_client`;
+  the exchange-log format at `output/llm_responses.log` is unchanged
+  byte-for-byte.
+- `next_song_selector.choose_next_song` and
+  `song_details_to_dj_intro.prepare_intro_text` /
+  `polish_intro_for_reading` / related helpers take `client` instead of
+  `model_name`.
+
+### Removals and Deprecations
+
+- Remove `DJ_LLM_BACKEND` and `OLLAMA_MODEL` environment variables. They
+  were only read internally by the old `llm_wrapper.py`; no external
+  callers depended on them. Migration examples are in `docs/USAGE.md`.
+- Remove `llm_wrapper.get_default_model_name`,
+  `select_ollama_model`, `query_ollama_model`, `get_llm_backend`,
+  `is_apple_model_available`, `list_ollama_models`, and
+  `get_vram_size_in_gb`. Backend dispatch now delegates to
+  `local_llm_wrapper.llm.LLMClient`.
+
+### Decisions and Failures
+
+- Kept the tolerant parser intact (ParseResult, heuristic recovery for
+  mp3 filenames and label-style blocks, `<intro text>` -> `<response>`
+  fallback). LLMs are chaotic; the parser's tolerance is a feature.
+- Chose CLI-driven single-transport selection over the vendored lib's
+  Apple-first-with-fallback pattern. Deterministic backend per run keeps
+  `output/llm_responses.log` useful for prompt tuning, which is the
+  user's primary diagnostic loop. Documented as a deliberate deviation
+  from `local-llm-wrapper/docs/API_IMPLEMENTATION_GUIDE.md`.
+- Narrow exception handling: `run_llm` catches
+  `local_llm_wrapper.errors.LLMError` only. `ValueError` and `TypeError`
+  from bad call arguments intentionally propagate as programmer errors.
+  Verified that all three documented `generate()` failure modes
+  (`TransportUnavailableError`, `ContextWindowError`,
+  `GuardrailRefusalError`) derive from `LLMError`.
+- Parity snapshot (1441 exchanges) showed 0 regressions and 0
+  improvements against the pre-port parser. Clean XML output in the
+  current log means the pre-clean stage is validated but not yet
+  exercised on malformed production data; it is a latent improvement
+  that will activate when models emit fenced/escaped outputs.
+
+### Developer Tests and Notes
+
+- Parity test is marked `@pytest.mark.slow` so default `pytest -q` skips
+  it. Run with `source source_me.sh && python3 -m pytest
+  tests/test_parser_parity.py -m slow -v`.
+- Pre-existing shebang test (`tests/test_shebangs.py`) had been failing
+  for six report scripts missing the executable bit; chmod +x applied.
+
 ## 2026-02-10
 - Close and archive `LLM_GUARDRAIL_TOLERANCE_REFACTOR_PLAN.md` with final closeout evidence; Gate D is closed by approved release exception (expiry `2026-03-15`).
 - Track played files per run in `output/played_files.log` (overwrite on startup) and exclude previously played tracks from next-song candidate selection and fallback picks.

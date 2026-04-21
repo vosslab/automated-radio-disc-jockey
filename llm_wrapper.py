@@ -1,31 +1,128 @@
+"""
+Adapter over local_llm_wrapper for the DJ repo.
+
+Backend plumbing (transport dispatch, VRAM probing, AFM vs Ollama selection)
+is delegated to local_llm_wrapper.llm. The tolerant parser and the exchange
+log stay here because they are DJ-domain code.
+"""
+
+# Standard Library
 import os
 import re
+import html
 import time
 import hashlib
 import datetime
-import subprocess
 from dataclasses import dataclass
 
 # PIP3 modules
 from rich import print
 from rich.markup import escape
 
-# Local repo modules
+# local repo modules
+import local_llm_wrapper.llm as llm
+import local_llm_wrapper.errors as llm_errors
 from cli_colors import Colors
+
 
 #============================================
 LLM_LOG_PATH = os.path.join("output", "llm_responses.log")
+
+# _CLIENT_INFO maps id(client) -> {"backend": ..., "model": ...}.
+# Populated by create_llm_client so describe_client keeps backend/model
+# precision in the exchange log without introspecting LLMClient internals.
+_CLIENT_INFO: dict[int, dict] = {}
+
 
 #============================================
 @dataclass
 class ParseResult:
 	"""
 	Structured parse result for tolerant LLM field extraction.
+
+	Fields:
+		value: extracted text, empty string if nothing recovered.
+		confidence_tier: 'high' | 'medium' | 'low' | 'none'.
+		parse_mode: 'tag_match' | 'open_tag_recovery' | 'heuristic_recovery' | 'missing'.
+		warnings: list of short diagnostic strings.
+		preclean_applied: True when normalize_llm_response_text modified the input.
 	"""
 	value: str
 	confidence_tier: str
 	parse_mode: str
 	warnings: list[str]
+	preclean_applied: bool = False
+
+
+#============================================
+# Pre-clean stage: normalize raw LLM output before running tolerant parsers.
+# These three helpers broaden tolerance without weakening any existing path.
+# They operate on the whole raw response, not on already-extracted tag contents.
+
+# Match fenced code blocks: optional language label, captured inner body.
+_FENCED_CODE_RE = re.compile(r"```[a-zA-Z0-9_+-]*\n?(.*?)```", re.DOTALL)
+
+
+def _unwrap_code_fences(text: str) -> str:
+	"""
+	Replace any ```lang\\n...\\n``` span with its inner content.
+	"""
+	if "```" not in text:
+		return text
+	unwrapped = _FENCED_CODE_RE.sub(lambda m: m.group(1), text)
+	return unwrapped
+
+
+def _unescape_entities(text: str) -> str:
+	"""
+	Decode HTML entities so &lt;tag&gt; becomes <tag>.
+	Only runs when an entity marker is present, to avoid surprises.
+	"""
+	if "&" not in text:
+		return text
+	return html.unescape(text)
+
+
+def _strip_outer_quotes(text: str) -> str:
+	"""
+	Strip one matched pair of outer quotes (ASCII single or double)
+	when the entire trimmed payload is wrapped by them and the inner
+	text contains no further occurrences of that quote character.
+	The inner-occurrence check avoids corrupting responses like
+	'"hello" and "goodbye"'.
+	"""
+	stripped = text.strip()
+	if len(stripped) < 2:
+		return text
+	first = stripped[0]
+	last = stripped[-1]
+	if first != last or first not in ('"', "'"):
+		return text
+	inner = stripped[1:-1]
+	if first in inner:
+		return text
+	return inner
+
+
+def normalize_llm_response_text(raw: str) -> str:
+	"""
+	Pre-clean raw LLM output before tolerant parsing.
+
+	Runs three idempotent cleanup steps:
+		1. Unwrap fenced code blocks (```lang ... ```).
+		2. Unescape HTML entities (&lt;tag&gt; -> <tag>).
+		3. Strip a single layer of outer matching quotes.
+
+	Returns the cleaned text. If no cleanup step modifies the input, the
+	original string is returned unchanged.
+	"""
+	if not raw:
+		return raw
+	cleaned = _unwrap_code_fences(raw)
+	cleaned = _unescape_entities(cleaned)
+	cleaned = _strip_outer_quotes(cleaned)
+	return cleaned
+
 
 #============================================
 def _extract_tag_by_bounds(raw_text: str, tag: str) -> str:
@@ -37,6 +134,7 @@ def _extract_tag_by_bounds(raw_text: str, tag: str) -> str:
 	if not matches:
 		return ""
 	return matches[-1].strip()
+
 
 #============================================
 def _extract_tag_missing_close(raw_text: str, tag: str) -> str:
@@ -56,6 +154,7 @@ def _extract_tag_missing_close(raw_text: str, tag: str) -> str:
 		return ""
 	return candidate.strip()
 
+
 #============================================
 def _extract_labeled_block(raw_text: str, tag: str) -> str:
 	"""
@@ -67,6 +166,7 @@ def _extract_labeled_block(raw_text: str, tag: str) -> str:
 		return ""
 	value = matches[-1][1].strip()
 	return value
+
 
 #============================================
 def _extract_tag_heuristic(raw_text: str, tag: str) -> str:
@@ -109,37 +209,72 @@ def _extract_tag_heuristic(raw_text: str, tag: str) -> str:
 
 	return ""
 
+
 #============================================
 def extract_tag_result(raw_text: str, tag: str) -> ParseResult:
 	"""
 	Extract a tag with layered tolerance and structured metadata.
+
+	Pre-cleans the raw text (fenced-code unwrap, HTML entity unescape,
+	outer-quote strip), then runs the existing extractors in order:
+	bounded -> missing-close -> heuristic.
 	"""
 	if not raw_text:
-		return ParseResult("", "none", "missing", [f"{tag}:empty_input"])
+		return ParseResult("", "none", "missing", [f"{tag}:empty_input"], False)
 
-	bounded_value = _extract_tag_by_bounds(raw_text, tag)
+	# Pre-clean is applied once at the top; downstream extractors see normalized text.
+	normalized = normalize_llm_response_text(raw_text)
+	preclean_applied = normalized != raw_text
+
+	bounded_value = _extract_tag_by_bounds(normalized, tag)
 	if bounded_value:
-		return ParseResult(bounded_value, "high", "tag_match", [])
+		return ParseResult(bounded_value, "high", "tag_match", [], preclean_applied)
 
-	missing_close_value = _extract_tag_missing_close(raw_text, tag)
+	missing_close_value = _extract_tag_missing_close(normalized, tag)
 	if missing_close_value:
-		return ParseResult(
-			missing_close_value,
-			"medium",
-			"open_tag_recovery",
-			[f"{tag}:open_tag_recovery"],
-		)
+		warnings = [f"{tag}:open_tag_recovery"]
+		return ParseResult(missing_close_value, "medium", "open_tag_recovery", warnings, preclean_applied)
 
-	heuristic_value = _extract_tag_heuristic(raw_text, tag)
+	heuristic_value = _extract_tag_heuristic(normalized, tag)
 	if heuristic_value:
-		return ParseResult(
-			heuristic_value,
-			"low",
-			"heuristic_recovery",
-			[f"{tag}:heuristic_recovery"],
-		)
+		warnings = [f"{tag}:heuristic_recovery"]
+		return ParseResult(heuristic_value, "low", "heuristic_recovery", warnings, preclean_applied)
 
-	return ParseResult("", "none", "missing", [f"{tag}:not_found"])
+	return ParseResult("", "none", "missing", [f"{tag}:not_found"], preclean_applied)
+
+
+#============================================
+def extract_xml_tag(raw_text: str, tag: str) -> str:
+	"""
+	Extract the last occurrence of a given XML-like tag.
+
+	Args:
+		raw_text (str): LLM output.
+		tag (str): Tag name to extract, for example 'choice' or 'response'.
+
+	Returns:
+		str: Extracted text or empty string if not found.
+	"""
+	return extract_tag_result(raw_text, tag).value
+
+
+_raw = "<response>Hello</response>"
+assert extract_xml_tag(_raw, "response") == "Hello"
+
+_raw2 = "<response>\nYou know that Canadian indie rock super-group..."
+assert extract_xml_tag(_raw2, "response").startswith("You know that Canadian")
+
+
+#============================================
+def extract_response_text(raw_text: str) -> str:
+	"""
+	Extract content inside <response> tags. Returns empty string if not found.
+	"""
+	result = extract_tag_result(raw_text, "response")
+	if result.value:
+		return result.value
+	return ""
+
 
 #============================================
 def _log_llm_exchange(
@@ -152,6 +287,9 @@ def _log_llm_exchange(
 ) -> None:
 	"""
 	Append a formatted LLM exchange entry to the log file.
+
+	Format is byte-stable: the same as the pre-port wrapper so saved logs
+	under tests/regression_reports/ stay comparable across versions.
 	"""
 	try:
 		log_dir = os.path.dirname(LLM_LOG_PATH)
@@ -178,257 +316,86 @@ def _log_llm_exchange(
 	except Exception:
 		return
 
+
 #============================================
-def extract_xml_tag(raw_text: str, tag: str) -> str:
+def create_llm_client(model: str | None, use_ollama: bool) -> llm.LLMClient:
 	"""
-	Extract the last occurrence of a given XML-like tag.
+	Build an LLMClient with a single transport selected by CLI flags.
+
+	Single-transport is intentional: mixed fallback would muddy the exchange
+	log's Backend/Model fields, which the user relies on for prompt tuning.
+	See the plan's "Deliberate deviations" section.
 
 	Args:
-		raw_text (str): LLM output.
-		tag (str): Tag name to extract, for example 'choice' or 'response'.
+		model: Exact Ollama model name, or None to auto-pick from VRAM.
+			Ignored when use_ollama is False.
+		use_ollama: True to use Ollama; False to use Apple Foundation Models.
 
 	Returns:
-		str: Extracted text or empty string if not found.
+		Configured LLMClient. Backend + model metadata is captured in the
+		module-level _CLIENT_INFO registry for describe_client().
 	"""
-	return extract_tag_result(raw_text, tag).value
-
-
-_raw = "<response>Hello</response>"
-assert extract_xml_tag(_raw, "response") == "Hello"
-
-_raw2 = "<response>\nYou know that Canadian indie rock super-group..."
-assert extract_xml_tag(_raw2, "response").startswith("You know that Canadian")
-
-#============================================
-def get_vram_size_in_gb() -> int | None:
-	"""
-	Detect GPU VRAM or unified memory on macOS systems.
-
-	Returns:
-		int | None: Size in GB if detected.
-	"""
-	try:
-		# system_profiler is macOS-only; this will fail on Linux/Windows.
-		architecture = subprocess.check_output(["uname", "-m"], text=True).strip()
-		is_apple_silicon = architecture.startswith("arm64")
-		if is_apple_silicon:
-			hardware_info = subprocess.check_output(
-				["system_profiler", "SPHardwareDataType"],
-				text=True,
-			)
-			match = re.search(r"Memory:\s(\d+)\s?GB", hardware_info)
-			if match:
-				return int(match.group(1))
-		else:
-			display_info = subprocess.check_output(
-				["system_profiler", "SPDisplaysDataType"],
-				text=True,
-			)
-			vram_match = re.search(r"VRAM.*?: (\d+)\s?MB", display_info)
-			if vram_match:
-				size_mb = int(vram_match.group(1))
-				return size_mb // 1024
-	except Exception:
-		return None
-	return None
-
-#============================================
-def list_ollama_models() -> list:
-	"""
-	List available Ollama models, raising if the service is unavailable.
-
-	Returns:
-		list: Model names.
-	"""
-	command = ["ollama", "list"]
-	result = subprocess.run(command, capture_output=True, text=True)
-	if result.returncode != 0:
-		message = result.stderr.strip() or "Ollama service not responding."
-		raise RuntimeError(f"Ollama unavailable: {message}")
-	lines = result.stdout.strip().splitlines()
-	models = []
-	for line in lines[1:]:
-		parts = line.split()
-		if parts:
-			models.append(parts[0])
-	return models
-
-#============================================
-def select_ollama_model() -> str:
-	"""
-	Select an Ollama model based on VRAM or unified memory and local availability.
-
-	Returns:
-		str: Model name to use.
-
-	Raises:
-		RuntimeError: If the chosen model is not available.
-	"""
-	env_model = os.environ.get("OLLAMA_MODEL", "").strip()
-	if env_model:
-		return env_model
-
-	vram_size_gb = get_vram_size_in_gb()
-	available = list_ollama_models()
-
-	model_name = "llama3.2:1b-instruct-q4_K_M"
-	if vram_size_gb is None:
-		# Non-macOS or unknown VRAM: pick a reasonable default and validate availability.
-		model_name = "llama3.2:3b-instruct-q5_K_M"
+	if use_ollama:
+		resolved_model = model if model else llm.choose_model(None)
+		transport = llm.OllamaTransport(model=resolved_model)
+		info = {"backend": "ollama", "model": resolved_model}
 	else:
-		if vram_size_gb > 40:
-			model_name = "gpt-oss:20b"
-		elif vram_size_gb > 14:
-			model_name = "phi4:14b-q4_K_M"
-		elif vram_size_gb > 4:
-			model_name = "llama3.2:3b-instruct-q5_K_M"
+		transport = llm.AppleTransport()
+		info = {"backend": "apple", "model": None}
+	client = llm.LLMClient(transports=[transport], quiet=True)
+	_CLIENT_INFO[id(client)] = info
+	return client
 
-	if model_name not in available:
-		available_display = ", ".join(available) if available else "none"
-		raise RuntimeError(
-			f"Required model '{model_name}' not found locally. "
-			f"Available models: {available_display}. "
-			f"Try: ollama pull {model_name}"
-		)
-	return model_name
 
 #============================================
-def query_ollama_model(prompt: str, model_name: str) -> str:
+def describe_client(client: llm.LLMClient) -> dict:
 	"""
-	Query Ollama with the given prompt, handling model selection.
+	Return backend and model metadata captured at client creation.
+
+	Falls back to ('unknown', None) only if a caller built an LLMClient
+	directly without going through create_llm_client.
+	"""
+	info = _CLIENT_INFO.get(id(client))
+	if info is None:
+		return {"backend": "unknown", "model": None}
+	return info
+
+
+#============================================
+def run_llm(prompt: str, client: llm.LLMClient, max_tokens: int = 1200) -> str:
+	"""
+	Run an LLM call through the configured client and log the exchange.
+
+	Only LLMError-derived failures are caught; programmer errors
+	(TypeError/ValueError from bad arguments) intentionally propagate.
 
 	Args:
-		prompt (str): Prompt text.
-		model_name (str): Name of the Ollama model to use.
+		prompt: Prompt text.
+		client: LLMClient from create_llm_client.
+		max_tokens: Generation token cap.
 
 	Returns:
-		str: Model response (may be empty on error).
+		Model response. Empty string if the client raised an LLMError.
 	"""
-	print(f"{Colors.SKY_BLUE}Sending prompt to LLM with model {escape(model_name)}...{Colors.ENDC}")
+	info = describe_client(client)
+	backend = info["backend"]
+	model_name = info["model"]
+	print(f"{Colors.SKY_BLUE}Sending prompt to {escape(backend)} (model={escape(str(model_name))})...{Colors.ENDC}")
 	print(f"{Colors.TEAL}Waiting for response...{Colors.ENDC}")
-	command = ["ollama", "run", model_name, prompt]
-	start_time = time.time()
-	result = subprocess.run(command, capture_output=True, text=True)
-	elapsed = time.time() - start_time
-	if result.returncode != 0:
-		print(f"{Colors.FAIL}Ollama error: {escape(result.stderr.strip())}{Colors.ENDC}")
-		return ""
-	output = result.stdout.strip()
-	print(
-		f"{Colors.NAVY}LLM response length: {len(output)} characters "
-		f"({elapsed:.2f}s).{Colors.ENDC}"
-	)
-	return output
-
-#============================================
-def is_apple_model_available() -> bool:
-	"""
-	Check whether Apple Foundation Models is available and enabled.
-
-	Returns:
-		bool: True if AFM can be used on this machine.
-	"""
-	try:
-		import config_apple_models
-		return config_apple_models.apple_models_available()
-	except Exception:
-		return False
-
-#============================================
-def get_llm_backend(preferred: str | None = None) -> str:
-	"""
-	Resolve which LLM backend to use.
-
-	Priority:
-		1) preferred argument
-		2) DJ_LLM_BACKEND env var
-		3) auto (AFM if available, else Ollama)
-
-	Valid values: auto, afm, ollama
-	"""
-	value = (preferred or os.environ.get("DJ_LLM_BACKEND", "auto")).strip().lower()
-	if value in ("auto", "afm", "ollama"):
-		return value
-	raise ValueError("DJ_LLM_BACKEND must be one of: auto, afm, ollama")
-
-#============================================
-def get_default_model_name(backend: str | None = None) -> str | None:
-	"""
-	Get a default model name for the active backend.
-
-	Returns:
-		str | None: Ollama model name, or None for AFM.
-	"""
-	chosen = get_llm_backend(backend)
-	if chosen == "afm":
-		return None
-	if chosen == "auto" and is_apple_model_available():
-		return None
-	return select_ollama_model()
-
-#============================================
-def run_llm(
-	prompt: str,
-	model_name: str | None = None,
-	backend: str | None = None,
-	max_tokens: int | None = None,
-) -> str:
-	"""
-	Run an LLM call using the configured backend.
-
-	Args:
-		prompt (str): Prompt text.
-		model_name (str | None): Ollama model to use (ignored by AFM).
-		backend (str | None): Override backend (auto/afm/ollama).
-		max_tokens (int | None): Backend-specific generation limit.
-
-	Returns:
-		str: Raw model output (may be empty on error).
-	"""
-	chosen = get_llm_backend(backend)
-	if chosen == "auto":
-		chosen = "afm" if is_apple_model_available() else "ollama"
-
 	start_time = time.time()
 	response = ""
-	error_text = ""
-	resolved_model = model_name
-
-	if chosen == "afm":
-		try:
-			import config_apple_models
-			print(f"{Colors.SKY_BLUE}Sending prompt to Apple Foundation Models...{Colors.ENDC}")
-			print(f"{Colors.TEAL}Waiting for response...{Colors.ENDC}")
-			response = config_apple_models.run_apple_model(
-				prompt,
-				max_tokens=max_tokens or 1200,
-			)
-		except Exception as error:
-			error_text = str(error)
-			print(f"{Colors.FAIL}AFM error: {escape(error_text)}{Colors.ENDC}")
-	else:
-		resolved_model = resolved_model or select_ollama_model()
-		response = query_ollama_model(prompt, resolved_model)
-
+	error_text: str | None = None
+	try:
+		response = client.generate(prompt, max_tokens=max_tokens)
+	except llm_errors.LLMError as exc:
+		error_text = f"{type(exc).__name__}: {exc}"
+		print(f"{Colors.FAIL}LLM error: {escape(error_text)}{Colors.ENDC}")
 	elapsed = time.time() - start_time
-	_log_llm_exchange(prompt, response, chosen, resolved_model, elapsed, error_text or None)
-
+	print(
+		f"{Colors.NAVY}LLM response length: {len(response)} characters "
+		f"({elapsed:.2f}s).{Colors.ENDC}"
+	)
+	_log_llm_exchange(prompt, response, backend, model_name, elapsed, error_text)
 	if error_text:
 		return ""
 	return response
-
-#============================================
-def extract_response_text(raw_text: str) -> str:
-	"""
-	Extract content inside <response> tags. Returns empty string if not found.
-
-	Args:
-		raw_text (str): LLM output.
-
-	Returns:
-		str: Cleaned response text or empty string.
-	"""
-	result = extract_tag_result(raw_text, "response")
-	if result.value:
-		return result.value
-	return ""

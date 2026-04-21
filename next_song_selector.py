@@ -38,6 +38,8 @@ def parse_args() -> argparse.Namespace:
 	parser.add_argument("-c", "--current", dest="current", required=True, help="Path to current song.")
 	parser.add_argument("-d", "--directory", dest="directory", required=True, help="Music directory to sample from.")
 	parser.add_argument("-n", "--sample-size", dest="sample_size", type=int, default=16, help="Number of candidates to consider.")
+	parser.add_argument("-O", "--ollama", dest="use_ollama", action="store_true", help="Use Ollama backend instead of Apple Foundation Models.")
+	parser.add_argument("-m", "--model", dest="model", type=str, default=None, help="Model name to use (for Ollama).")
 	return parser.parse_args()
 
 #============================================
@@ -263,7 +265,7 @@ def build_candidate_songs(
 	return candidates
 
 #============================================
-def choose_next_song(current_song: Song, song_list: list[str], sample_size: int, model_name: str | None = None, candidates: list[Song] | None = None, show_candidates: bool = True) -> SelectionResult:
+def choose_next_song(current_song: Song, song_list: list[str], sample_size: int, client, candidates: list[Song] | None = None, show_candidates: bool = True) -> SelectionResult:
 	"""
 	Select the next song using an LLM over a sampled candidate pool.
 
@@ -271,6 +273,7 @@ def choose_next_song(current_song: Song, song_list: list[str], sample_size: int,
 		current_song (Song): Currently playing song with metadata.
 		song_list (list[str]): List of all available song file paths.
 		sample_size (int): Number of candidate songs to consider.
+		client: LLMClient from llm_wrapper.create_llm_client. Required.
 
 	Returns:
 		Song | None: Chosen next Song object, or None if selection fails.
@@ -290,7 +293,7 @@ def choose_next_song(current_song: Song, song_list: list[str], sample_size: int,
 
 	prompt = build_selection_prompt(current_song, candidate_songs)
 
-	raw = llm_wrapper.run_llm(prompt, model_name=model_name, max_tokens=220)
+	raw = llm_wrapper.run_llm(prompt, client=client, max_tokens=220)
 	choice_result = llm_wrapper.extract_tag_result(raw, "choice")
 	reason_result = llm_wrapper.extract_tag_result(raw, "reason")
 	raw_choice = choice_result.value
@@ -312,7 +315,7 @@ def choose_next_song(current_song: Song, song_list: list[str], sample_size: int,
 			print(f"{Colors.WARNING}LLM reason needs recovery: (empty){Colors.ENDC}")
 		print(f"{Colors.WARNING}Choice and reason were unusable; retrying once for recoverable output.{Colors.ENDC}")
 		retry_prompt = build_selection_prompt(current_song, candidate_songs)
-		raw_retry = llm_wrapper.run_llm(retry_prompt, model_name=model_name, max_tokens=220)
+		raw_retry = llm_wrapper.run_llm(retry_prompt, client=client, max_tokens=220)
 		choice_retry_result = llm_wrapper.extract_tag_result(raw_retry, "choice")
 		reason_retry_result = llm_wrapper.extract_tag_result(raw_retry, "reason")
 		raw_choice_retry = choice_retry_result.value
@@ -361,7 +364,7 @@ def main() -> None:
 
 	# Keep library as paths, cheap
 	song_paths = audio_utils.get_song_list(args.directory)
-	model_name = llm_wrapper.get_default_model_name()
+	client = llm_wrapper.create_llm_client(args.model, args.use_ollama or bool(args.model))
 
 	current_path = os.path.abspath(args.current)
 	if current_path not in song_paths:
@@ -373,7 +376,7 @@ def main() -> None:
 	print(current_song.one_line_info(color=True))
 	print("="*60)
 
-	result = choose_next_song(current_song, song_paths, args.sample_size, model_name=model_name)
+	result = choose_next_song(current_song, song_paths, args.sample_size, client=client)
 	next_song = result.song
 	if next_song:
 		print(f"{Colors.OKCYAN}Next song: {escape(next_song.path)}{Colors.ENDC}")

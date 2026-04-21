@@ -10,7 +10,7 @@ This document describes how the automated radio DJ pieces fit together, which sc
 3. For every track:
    - `song_details_to_dj_intro.fetch_song_details` gathers wiki/Last.fm/AllMusic summaries.
    - `song_details_to_dj_intro.prepare_intro_text` sends prompts to the LLM via `llm_wrapper.run_llm` to generate DJ intros.
-   - `llm_wrapper.extract_tag_result` performs layered parsing (`strict_tag`, `missing_close_tag`, `heuristic_fallback`) and returns parse metadata used by selector and referee paths.
+   - `llm_wrapper.extract_tag_result` pre-cleans the raw text (fenced-code unwrap, HTML entity unescape, outer-quote strip) then runs layered parsing (`tag_match`, `open_tag_recovery`, `heuristic_recovery`) and returns parse metadata (including `preclean_applied`) used by selector and referee paths.
    - `tts_helpers.speak_dj_intro` formats/cleans the intro and produces audio via the selected engine (macOS `say`, `gtts`, or `pyttsx3`), then SoX adjusts tempo.
    - `playback_helpers.play_song` / `wait_for_song_end` handle audio playback.
    - When a track plays, `next_song_selector.choose_next_song` samples candidates, calls the LLM, and uses structured parse results for `<choice>` / `<reason>`.
@@ -26,7 +26,8 @@ This document describes how the automated radio DJ pieces fit together, which sc
 | `audio_utils.py` | `Song`, `get_song_list`, `select_song`, `select_song_list` | Loads metadata (title/artist/album/length/year) using `mutagen`, caches info for display. |
 | `song_details_to_dj_intro.py` | `fetch_song_details`, `build_prompt`, `prepare_intro_text` | Fetches external info and constructs the DJ intro prompt structure (facts list + `<response>`). |
 | `next_song_selector.py` | `build_candidate_songs`, `choose_next_song`, `SelectionResult`, `clean_llm_choice`, `match_candidate_choice` | Samples candidates, runs the scoring prompt, normalizes filenames to map `<choice>` text back to `Song` objects. |
-| `llm_wrapper.py` | `run_llm`, `extract_tag_result`, `extract_xml_tag`, `extract_response_text`, model detection helpers | Encapsulates AFM/Ollama calls and layered tag extraction with parse-mode/confidence telemetry. |
+| `llm_wrapper.py` | `create_llm_client`, `describe_client`, `run_llm`, `extract_tag_result`, `extract_xml_tag`, `extract_response_text`, `normalize_llm_response_text` | Adapter over the in-tree `local_llm_wrapper` package. Backend dispatch (AFM vs Ollama, transport construction) delegates to `local_llm_wrapper.llm.LLMClient`; the DJ-specific tolerant parser and exchange logging at `output/llm_responses.log` stay local. |
+| `local_llm_wrapper/` (vendored) | `LLMClient`, `OllamaTransport`, `AppleTransport`, `choose_model` | Vendored in-tree copy of the local LLM client library that owns transport dispatch, VRAM probing, and model auto-selection. Consumed only by `llm_wrapper.py`. |
 | `tts_helpers.py` | `format_intro_for_tts`, `text_to_speech_{say,gtts,pyttsx3}`, `speak_text`, `speak_dj_intro` | Pre/post-processes intro text, converts to audio via macOS `say` (default), Google TTS, or `pyttsx3`, then uses SoX for tempo adjustments. |
 | `playback_helpers.py` | `ensure_mixer_initialized`, `play_song`, `wait_for_song_end` | Simple pygame-based audio playback lifecycle. |
 | `audio_file_to_details.py` | `Metadata.fetch_wikipedia_info`, other fetch helpers | Command-line tool reused by `song_details_to_dj_intro` for metadata lookups. |
@@ -58,5 +59,7 @@ Helper scripts (`get_random_song.sh`, `get_details.sh`, `test_steps.sh`) wrap th
 - `--tts-speed X.Y` (default 1.2)
 - `--tts-engine {say,gtts,pyttsx3}` (default `say`)
 - `--testing` (play only ~20 seconds per song)
+- `-O/--ollama` (use Ollama with VRAM-auto-picked model; default is AFM)
+- `-m/--model MODEL` (exact Ollama model, implies `--ollama`; validated at startup)
 
 All helper scripts have `-h/--help` for their specific options.
