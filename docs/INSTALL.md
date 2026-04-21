@@ -14,5 +14,8 @@ python3.12 -m pip install -r pip_requirements.txt
 ```
 
 ## LLM backends
+
+Backend dispatch is delegated to the vendored [local-llm-wrapper](../local-llm-wrapper/) package; this repo is model-agnostic and does not import any backend SDK directly.
+
 - Ollama (local) is supported via the `ollama` CLI.
-- Apple Foundation Models require Apple Silicon, macOS 26+, and Apple Intelligence enabled (see [config_apple_models.py](../config_apple_models.py)).
+- Apple Foundation Models require Apple Silicon, macOS 26+, and Apple Intelligence enabled. The SDK dependency lives with `local-llm-wrapper`.

@@ -9,11 +9,20 @@ log stay here because they are DJ-domain code.
 # Standard Library
 import os
 import re
+import sys
 import html
 import time
 import hashlib
 import datetime
 from dataclasses import dataclass
+
+# The vendored client lives at local-llm-wrapper/local_llm_wrapper/. The
+# outer directory uses a hyphen so it is not importable directly; add it
+# to sys.path so the inner package is found. Done here (not in source_me.sh)
+# so imports do not depend on shell setup.
+_VENDORED_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "local-llm-wrapper")
+if _VENDORED_PATH not in sys.path:
+	sys.path.insert(0, _VENDORED_PATH)
 
 # PIP3 modules
 from rich import print

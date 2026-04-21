@@ -16,8 +16,15 @@
   test enforces a monotonic rule: no regression on previously-recovered
   cases; improvements from pre-clean are allowed. Report artifact at
   `tests/regression_reports/parser_parity_20260421.md`.
-- Vendor `local_llm_wrapper` as an in-tree subpackage at repo root so
-  `llm_wrapper.py` can import it with no shell-env dependency.
+- Consume vendored `local-llm-wrapper/` (the full in-tree repo directory)
+  via an adapter-local `sys.path.insert` bootstrap in `llm_wrapper.py`.
+  The outer directory name is hyphenated so Python cannot import it
+  directly; the bootstrap exposes the inner `local_llm_wrapper/` package
+  without requiring `source_me.sh` or a pip install step.
+- Add `requests` to `pip_requirements.txt` (used by the new
+  `_validate_ollama_model` startup check). Add `transliterate` (already
+  used by `song_details_to_dj_intro.py` for cyrillic -> latin script
+  conversion; was undeclared).
 
 ### Behavior or Interface Changes
 
@@ -50,6 +57,13 @@
   `is_apple_model_available`, `list_ollama_models`, and
   `get_vram_size_in_gb`. Backend dispatch now delegates to
   `local_llm_wrapper.llm.LLMClient`.
+- Delete `config_apple_models.py` (dead code after Patch 1). The old
+  wrapper was the only caller; Apple Foundation Models access now lives
+  entirely in `local_llm_wrapper.transports.apple`. Repo is now
+  model-agnostic: no DJ-repo script imports any backend SDK directly.
+- Remove `applefoundationmodels` from `pip_requirements.txt`. The AFM
+  SDK dependency belongs with the vendored `local-llm-wrapper` package,
+  not with this repo.
 
 ### Decisions and Failures
 
@@ -80,6 +94,13 @@
   tests/test_parser_parity.py -m slow -v`.
 - Pre-existing shebang test (`tests/test_shebangs.py`) had been failing
   for six report scripts missing the executable bit; chmod +x applied.
+- Add `local_llm_wrapper` to `LOCAL_IMPORT_WHITELIST` in
+  `tests/test_import_requirements.py` so the in-tree vendored package is
+  recognized as a valid import source (it is not a flat repo-local
+  module and not a pip dep).
+- `tests/test_parser_parity.py` derives its snapshot path from
+  `__file__` rather than a hardcoded absolute path, so the test works
+  regardless of the directory's surface name (hyphen vs underscore).
 
 ## 2026-02-10
 - Close and archive `LLM_GUARDRAIL_TOLERANCE_REFACTOR_PLAN.md` with final closeout evidence; Gate D is closed by approved release exception (expiry `2026-03-15`).

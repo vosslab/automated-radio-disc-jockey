@@ -2,16 +2,14 @@
 
 # Standard Library
 import os
+import re
 import time
-import json
-import urllib.request
-import urllib.error
+import random
 import argparse
 import threading
-import re
-import random
 
 # PIP3 modules
+import requests
 from rich.console import Console
 from rich import print
 from rich.markup import escape
@@ -45,14 +43,13 @@ def _validate_ollama_model(model: str, base_url: str = "http://localhost:11434")
 		RuntimeError: if model is not available locally
 	"""
 	url = f"{base_url}/api/tags"
-	request = urllib.request.Request(url)
 	try:
-		response = urllib.request.urlopen(request, timeout=15)
-	except (urllib.error.URLError, TimeoutError):
+		response = requests.get(url, timeout=15)
+	except requests.RequestException:
 		raise RuntimeError(
 			f"Cannot connect to Ollama at {base_url}\n"
 			"Start Ollama first: ollama serve")
-	data = json.loads(response.read().decode("utf-8"))
+	data = response.json()
 	local_models = [m["name"] for m in data.get("models", [])]
 	if model not in local_models:
 		installed_str = ", ".join(local_models) if local_models else "none"

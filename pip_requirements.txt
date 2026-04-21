@@ -1,8 +1,10 @@
 gtts
 mutagen
 pygame
+requests
 rich
+transliterate
 #py3-tts<=3.4
 #pyttsx3
-# Apple Foundation Models backend (macOS 26+ with Apple Intelligence)
-# applefoundationmodels
+# Apple Foundation Models are handled by the vendored local-llm-wrapper
+# package; this repo does not depend on applefoundationmodels directly.

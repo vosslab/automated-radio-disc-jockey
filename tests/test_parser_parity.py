@@ -102,13 +102,9 @@ def test_parser_parity_no_regression():
 
 	Side effect: writes parser_parity_20260421.md report.
 	"""
-	repo_root = "/Users/vosslab/nsh/automated_radio_disc_jockey"
-	snapshot_path = os.path.join(
-		repo_root, "tests", "regression_reports", "snapshot_20260421.log"
-	)
-	report_path = os.path.join(
-		repo_root, "tests", "regression_reports", "parser_parity_20260421.md"
-	)
+	reports_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "regression_reports")
+	snapshot_path = os.path.join(reports_dir, "snapshot_20260421.log")
+	report_path = os.path.join(reports_dir, "parser_parity_20260421.md")
 
 	# Parse snapshot
 	responses = parse_snapshot_blocks(snapshot_path)
@@ -174,7 +170,7 @@ def test_parser_parity_no_regression():
 	), f"Found {total_regressions} regressions; test FAILED"
 
 	# Generate markdown report
-	generate_report(repo_root, report_path, stats, all_improvements)
+	generate_report(report_path, stats, all_improvements)
 
 	# Print summary
 	print(f"\n{'='*70}")
@@ -190,7 +186,6 @@ def test_parser_parity_no_regression():
 
 #============================================
 def generate_report(
-	repo_root: str,
 	report_path: str,
 	stats: dict[str, TagStats],
 	all_improvements: list,

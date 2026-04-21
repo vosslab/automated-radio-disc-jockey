@@ -22,6 +22,9 @@ REQUIREMENT_FILES = (
 	os.path.join("config_files", "pip_extras.txt"),
 )
 LOCAL_IMPORT_WHITELIST = {
+	# Vendored in-tree at local-llm-wrapper/local_llm_wrapper/ and added to
+	# sys.path by llm_wrapper.py. Not a pip dep, not a flat repo-local module.
+	"local_llm_wrapper",
 }
 IMPORT_REQUIREMENT_ALIASES = {
 	"applescript": "py-applescript",
