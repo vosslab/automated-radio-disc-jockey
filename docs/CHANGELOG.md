@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-04-28
+
+### Fixes and Maintenance
+
+- Raise DJ intro render loudness by adding a SoX `vol 1.12` stage before the existing compand/norm chain in [`tts_helpers.py`](../tts_helpers.py), so the spoken transitions sit slightly above the music instead of getting buried under louder tracks.
+
+### Developer Tests and Notes
+
+- Add a focused unit test in [`tests/test_tts_helpers.py`](../tests/test_tts_helpers.py) that asserts the SoX command includes the new louder gain stage.
+
 ## 2026-04-21
 
 ### Additions and New Features

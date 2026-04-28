@@ -26,7 +26,7 @@ except ImportError:
 from cli_colors import Colors
 
 DEFAULT_ENGINE = "say"
-TTS_VOLUME_GAIN = 0.99
+TTS_VOLUME_GAIN = 1.12
 
 #============================================
 def format_intro_for_tts(text: str) -> str:
@@ -220,6 +220,7 @@ def process_audio_with_sox(input_file: str, speed: float, output_file: str | Non
 	command = (
 		f"sox \"{input_file}\" \"{output_file}\" "
 		f"tempo {speed} "
+		f"vol {TTS_VOLUME_GAIN} "
 		"compand 0.6,1.4 6:-70,-60,-20 -14 -12 0.05 "
 		"silence 1 0.1 1% -1 0.9 1% "
 		"norm -3"
