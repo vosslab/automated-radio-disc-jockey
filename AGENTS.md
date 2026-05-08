@@ -5,7 +5,6 @@ This repo is split into small scripts that can be run independently or orchestra
 policy is "prompts are human-authored" do not edit prompts/*.txt
 
 ## Shell Usage
-- Use `bash` for shell command execution in this repo.
 - Prefix command runs with `source source_me.sh && ...` so repo defaults are consistently applied.
 
 ## Core Modules
